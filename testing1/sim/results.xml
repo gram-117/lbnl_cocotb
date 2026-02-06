@@ -1,0 +1,6 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1769061038" />
+    <testcase name="my_second_test" classname="test_my_design" file="/home/grammy/lbnl/cocotb/testing1/tests/test_my_design.py" lineno="17" time="0.0008206367492675781" sim_time_ns="6.0" ratio_time="7311.395700174317" />
+  </testsuite>
+</testsuites>
