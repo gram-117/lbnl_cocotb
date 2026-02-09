@@ -1,6 +1,6 @@
 <testsuites name="results">
   <testsuite name="all" package="all">
-    <property name="random_seed" value="1770413098" />
-    <testcase name="pixel_test" classname="pixel_test_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/pixel_test_top.py" lineno="20" time="0.030365705490112305" sim_time_ns="48.01" ratio_time="1581.0599235256707" />
+    <property name="random_seed" value="1770666935" />
+    <testcase name="pixel_test" classname="pixel_test_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/pixel_test_top.py" lineno="28" time="0.007887840270996094" sim_time_ns="52.07" ratio_time="6601.300002418087" />
   </testsuite>
 </testsuites>
