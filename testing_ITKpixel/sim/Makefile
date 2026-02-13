@@ -16,10 +16,12 @@ PROJ_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 # HDL sources
 VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/rtl/files.f))
 
-# Top-level module name in the HDL
+# # Top-level module name in the HDL
+# TOPLEVEL := PixelRegionLogic
 TOPLEVEL := PixelLogic
 
-# Python test module (file name without .py)
+# # Python test module (file name without .py)
+# MODULE := pixelregion_test_top
 MODULE := pixel_test_top
 
 # Tests live in ../tests, so add that to PYTHONPATH
