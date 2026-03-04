@@ -1,6 +1,0 @@
-<testsuites name="results">
-  <testsuite name="all" package="all">
-    <property name="random_seed" value="1771018324" />
-    <testcase name="pixel_test" classname="pixel_test_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/pixel_test_top.py" lineno="28" time="0.02173447608947754" sim_time_ns="52.07" ratio_time="2395.7329261416617" />
-  </testsuite>
-</testsuites>

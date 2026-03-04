@@ -212,10 +212,10 @@ module TotCounter (
     // MODIFIED TO ADD RST
     always_latch begin
     if (!Reset_b) begin
-        cnt_clk = 1'b0;
+        cnt_clk <= 1'b0; // changed to <- inside always comb lbock
     end
     else if(Hit && !TotOverflow && !HitTe) begin 
-           cnt_clk = PixelClkGated;
+           cnt_clk <= PixelClkGated;
     end
     end
     // ^^ was originally LHQD2 cnt clock latch instead using given code !!!!!

@@ -21,7 +21,7 @@
 
 //
 // Dependencies:
-//
+// //
 // `include "rtl/common/defines.sv"
 // `include "rtl/common/CgWrapper.v"   // hard-coded clock-gating module
 

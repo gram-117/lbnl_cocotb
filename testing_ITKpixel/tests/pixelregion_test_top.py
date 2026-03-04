@@ -66,7 +66,7 @@ async def pixel_test(dut):
     dut.Trig.value = 0
     dut.TrigIdReq.value = 0
     dut.TokIn.value = 0
-    dut.Read.value = 1
+    dut.Read.value = 0
 
     # init golden model: clk_period, dual_edge, map_6to4, (depth=8)
     # dont need just confirm functionality initially
@@ -87,8 +87,11 @@ async def pixel_test(dut):
         dut.Hit.value = LogicArray.from_unsigned(0, 4) # just 0 work?
         await Timer(1, unit="ns")
         dut.Trig.value = 1
+        dut.Read.value = 1
         await Timer(500, unit="ps")
         dut.Trig.value = 0
+        await Timer(500, unit="ps")
+        dut.Read.value = 0
         await Timer(1200, unit = "ps")
 
 

@@ -1,14 +1,16 @@
 # RCA/sim/Makefile
 
-SIM ?= icarus # icarus has complains abt sv verilator instead?
+# SIM ?= icarus
+# TOPLEVEL_LANG ?= verilog # just set to verilog, sv works 
+
+SIM ?= verilator #
 TOPLEVEL_LANG ?= verilog
-# VERILATOR_ARGS += -Wno-fatal
-# EXTRA_ARGS += -Wno-fatal
-# COMPILE_ARGS += -Wno-fatal
-# VERILATOR_VERILOG ?= 1
-# COMPILE_ARGS += --sv
-# EXTRA_ARGS   += --trace --trace-fst --trace-structs --trace-depth 10
-# COMPILE_ARGS += --trace --trace-fst --trace-structs --trace-depth 10
+
+ifeq ($(SIM),verilator)
+  VERILATOR_ARGS += --sv
+  VERILATOR_ARGS += --trace --trace-fst --trace-structs
+  VERILATOR_ARGS += -Wno-fatal -Wno-UNOPTFLAT
+endif
 
 # project dir = one level above this sim/ directory
 PROJ_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
@@ -17,12 +19,16 @@ PROJ_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/rtl/files.f))
 
 # # Top-level module name in the HDL
-# TOPLEVEL := PixelRegionLogic
-TOPLEVEL := PixelLogic
-
 # # Python test module (file name without .py)
+# TOPLEVEL := LatencyMem
+# MODULE := LatencyMem_test_top
+
 # MODULE := pixelregion_test_top
+# TOPLEVEL := PixelRegionLogic
+
+# known working
 MODULE := pixel_test_top
+TOPLEVEL := PixelLogic
 
 # Tests live in ../tests, so add that to PYTHONPATH
 export PYTHONPATH := $(PROJ_DIR)/tests:$(PYTHONPATH)

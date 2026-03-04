@@ -76,7 +76,7 @@ module PixelRegionLogic (
    output wire [15:0] DataToCore                         // triggered ToT values from pixels
 
    ) ;
-
+// latency config 
 
    //////////////////////////////////////////
    //   common region-level clock gating   //
