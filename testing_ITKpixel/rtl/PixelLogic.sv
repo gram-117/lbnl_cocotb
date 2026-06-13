@@ -212,10 +212,10 @@ module TotCounter (
     // MODIFIED TO ADD RST
     always_latch begin
     if (!Reset_b) begin
-        cnt_clk <= 1'b0; // changed to <- inside always comb lbock
+        cnt_clk = 1'b0; // changed to <- inside always comb lbock update back to = bcs verilator
     end
     else if(Hit && !TotOverflow && !HitTe) begin 
-           cnt_clk <= PixelClkGated;
+           cnt_clk = PixelClkGated;
     end
     end
     // ^^ was originally LHQD2 cnt clock latch instead using given code !!!!!
@@ -257,25 +257,42 @@ module TotCounter (
     // Output of counter (stage one)
     // in dual edge mode bit 0 is the Disc falling edge phase
     wire [5:0] tot_cnt_stageone;
-    assign tot_cnt_stageone = {init_tot_cnt[5:1], (TotDualEdgeCount ? fall_phase : init_tot_cnt[0]) };
+    // modify for verilator. tacking on LSB later
+    // assign tot_cnt_stageone = {init_tot_cnt[5:1], (TotDualEdgeCount ? fall_phase : init_tot_cnt[0]) };
+    assign tot_cnt_stageone = {init_tot_cnt[5:1], 1'b0}; // temp 0
 
 
     // icarus is complaining about this part: TRYING TO REPLACE
     //sorry: constant selects in always_* processes are not currently supported (all bits will be included).
     // 6-to-4 bit converter
-    reg [3:0] tot_cnt_int;
+    reg [3:0] tot_cnt_int; // use just for tot overflow, lsb doesnt matter
+    reg [3:0] with_fall_phase;  // seperate for tot out
     always_comb begin // replaced * with comb
-        if(|tot_cnt_stageone[5:3] && Tot6to4Mapping) // or all bits in stgone %% if 6to4enable
+        if(|tot_cnt_stageone[5:3] && Tot6to4Mapping) begin// or all bits in stgone %% if 6to4enable
             tot_cnt_int[3:0] = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)};
-        else
+            // this looks like shit but its verilators fault account for falling phase lsb
+            if (fall_phase) begin
+                with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h1)}; 
+            end
+            else begin
+                with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)}; 
+            end
+        end
+        else begin
             tot_cnt_int[3:0] = tot_cnt_stageone[3:0];
+            with_fall_phase = {tot_cnt_stageone[3:1], 1'b1}; // holy shit *** take a look
+        end
     end
+
+    
 
     // Overflow detector
     assign TotOverflow = (tot_cnt_int[3:1] == 3'b111); // x=='d14 || x=='d15
 
     // exclude 0x0f from output encoding: Reserved for "No data present" code.
-    assign TotCnt = (&(tot_cnt_int[3:1]) ? {tot_cnt_int[3:1], 1'b0} : tot_cnt_int);
+
+    assign TotCnt = (&(with_fall_phase[3:1]) ? {with_fall_phase[3:1], 1'b0} : 
+            with_fall_phase);
     // ^ if all ones then make the last 1 0
     
 endmodule: TotCounter
@@ -367,24 +384,36 @@ module TotMemory (
     //   data readout   //
     //////////////////////
 
-    wire [3:0] tot_mem_out [`LATENCY_MEM_DEPTH-1:0] ;
+    // wire [3:0] tot_mem_out [`LATENCY_MEM_DEPTH-1:0] ;
 
-    generate
-       genvar m ;
+    // generate
+    //    genvar m ;
 
-       for(m = 0; m < `LATENCY_MEM_DEPTH; m++) begin : TotMemOut
+    //    for(m = 0; m < `LATENCY_MEM_DEPTH; m++) begin : TotMemOut
 
-          if(m == 0)
-             assign tot_mem_out[m] = tot_mem[m] & {4{TotMemReadAddr[m]}} ;
-          else
-             assign tot_mem_out[m] = ( tot_mem[m] & {4{TotMemReadAddr[m]}} ) | tot_mem_out[m-1] ;
+    //       if(m == 0)
+    //          assign tot_mem_out[m] = tot_mem[m] & {4{TotMemReadAddr[m]}} ;
+    //       else
+    //          assign tot_mem_out[m] = ( tot_mem[m] & {4{TotMemReadAddr[m]}} ) | tot_mem_out[m-1] ;
 
-       end
-    endgenerate 
+    //    end
+    // endgenerate 
     
-    // output data
-    assign TotMemDataOut[3:0] = tot_mem_out[`LATENCY_MEM_DEPTH-1][3:0] ;
-    
+    // // output data
+    // assign TotMemDataOut[3:0] = tot_mem_out[`LATENCY_MEM_DEPTH-1][3:0] ;
+
+    // ^^ replicate the above code
+    logic [3:0] tot_mem_dataout;
+
+    always_comb begin
+    tot_mem_dataout = 4'b0;
+    for (int m = 0; m < `LATENCY_MEM_DEPTH; m++) begin
+        tot_mem_dataout |= (tot_mem[m] & {4{TotMemReadAddr[m]}});
+    end
+    end
+
+    assign TotMemDataOut[3:0] = tot_mem_dataout;
+        
 endmodule: TotMemory
 
 //

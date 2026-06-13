@@ -87,6 +87,8 @@ module LatencyMemCell (
  
     logic [`LATENCY_COUNTER_BITS-1:0] counter ;
  
+
+    // latched bcid == top level request BCID?
     wire counter_last ;
     assign counter_last = (counter[`LATENCY_COUNTER_BITS-1:0] == LatCntReq[`LATENCY_COUNTER_BITS-1:0] ) & start_state & (!trig_state) ;
  
@@ -98,10 +100,11 @@ module LatencyMemCell (
     always_ff @(posedge gated_clk) begin
  
         if (counter_last)       
-        // // register the number identifying the trigger
+        // // register the number identifying the trigger REUSE THE SAME FLIP FLOPS
             counter[`LATENCY_COUNTER_BITS-1:0] <= {LatCnt[`LATENCY_COUNTER_BITS-1:`TRIG_ID_BITS], TrigId[`TRIG_ID_BITS-1:0]} ;    // saves gates and improves testability
 
         else if(WriteLatMem)
+        // get current LatCnt
             counter[`LATENCY_COUNTER_BITS-1:0] <= LatCnt[`LATENCY_COUNTER_BITS-1:0] ;
  
     end   // always_ff
