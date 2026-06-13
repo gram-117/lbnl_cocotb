@@ -1,20 +1,29 @@
 import cocotb
-from cocotb.triggers import RisingEdge, FallingEdge, Timer
-from cocotb.types import LogicArray
-from cocotb.utils import get_sim_time
-from collections import deque
+from cocotb.triggers import RisingEdge, Timer
+
+
+# ============================================================
+# Test config
+# ============================================================
 
 TOT6TO4 = True
 TOT_DUAL_EDGE = False
 
-CLK_PERIOD = 400  # ps  (this is NOT 40MHz; it's fast for sim speed. Real would be 25000 ps)
-LATENCY_MEM_DEPTH = 8
-LATENCY_COUNTER_BITS = 9
-TRIG_ID_BITS = 5  # assumed from typical RD53 config
+CLK_PERIOD = 400  # ps; fast sim clock. Real 40 MHz would be 25000 ps.
 
+LATENCY_COUNTER_BITS = 9
+
+# For clean single-hit test, use one pixel only.
+# Old value 63 = 0b111111, which fires pixels 0 through 5.
+PIXEL_MASK = 0x1
+
+
+# ============================================================
+# Clock / counter helpers
+# ============================================================
 
 async def generate_clock(dut):
-    """Free-running 40 MHz BX clock."""
+    """Free-running clock on DigitalCore ClkIn."""
     while True:
         dut.ClkIn.value = 0
         await Timer(CLK_PERIOD // 2, unit="ps")
@@ -28,21 +37,17 @@ def bin_to_gray(val, bits):
     return g & ((1 << bits) - 1)
 
 
-
-# use 120 wrap around for simplicy, read bcid wrap around takes alot longer
 async def generate_latency_counters(dut):
     """
     Drive LatCntIn and LatCntReqIn as Gray-encoded counters.
     Trigger latency = 20 BX.
-    BX counter wraps at 120.
     """
-    bx = 20 # start at 20 to make things easier
+    bx = 20
     while True:
         await RisingEdge(dut.ClkIn)
-        bx = (bx + 1)
+        bx = bx + 1
         dut.LatCntIn.value = bin_to_gray(bx, LATENCY_COUNTER_BITS)
-        # 20 BX latency
-        bx_req = (bx - 20)
+        bx_req = bx - 20
         dut.LatCntReqIn.value = bin_to_gray(bx_req, LATENCY_COUNTER_BITS)
 
 
@@ -56,15 +61,16 @@ async def reset_dut(dut):
     """Apply synchronous active-low reset."""
     dut.ResetIn_b.value = 1
     await RisingEdge(dut.ClkIn)
+
     dut.ResetIn_b.value = 0
-    # Hold reset for a few clocks so all gated-clock domains see it
     await wait_clks(dut, 5)
+
     dut.ResetIn_b.value = 1
     await wait_clks(dut, 2)
 
 
 def decode_region_data(data_16bit):
-    """Extract 4 x 4-bit ToT values from the 16-bit DataToCore bus."""
+    """Extract 4 x 4-bit ToT values from the 16-bit region data bus."""
     tots = []
     for p in range(4):
         tot = (data_16bit >> (4 * p)) & 0xF
@@ -72,243 +78,247 @@ def decode_region_data(data_16bit):
     return tots
 
 
+# ============================================================
+# Safe value helpers
+# ============================================================
+
+def val_has_unknown(obj):
+    """Detect X/Z/U/? in a signal value string."""
+    s = str(obj.value).lower()
+    return ("x" in s) or ("z" in s) or ("u" in s) or ("?" in s)
+
+
+def val_unsigned(obj):
+    """
+    Convert cocotb signal value to unsigned int.
+    Returns None if signal contains X/Z or cannot be converted.
+    """
+    try:
+        if val_has_unknown(obj):
+            return None
+
+        v = obj.value
+
+        if hasattr(v, "to_unsigned"):
+            return v.to_unsigned()
+
+        s = str(v)
+        if all(c in "01" for c in s):
+            return int(s, 2)
+
+        return int(s)
+
+    except Exception:
+        return None
+
+
+
+# ============================================================
+# Main test
+# ============================================================
+
 @cocotb.test()
 async def pixel_test(dut):
-    """Inject hits into PixelRegionLogic and read back ToT values."""
+    """Inject one hit into DigitalCore and check readout propagation to RegionDataOut."""
 
-    cocotb.start_soon(generate_clock(dut))
+    clk_task = cocotb.start_soon(generate_clock(dut))
+    cnt_task = None
 
-    # --- Static signal initialization ---
-    dut.ResetIn_b.value          = 1
-    dut.AnaHit.value             = 0          # no hits (64-bit, one per pixel)
-    dut.CoreRowAddrIn.value      = 0          # bottom core row
-    dut.AnaInjectionModeIn.value = 0          # uniform charge-injection mode
-    dut.EnDigHitIn.value         = 0          # analog injection (not digital)
-    dut.Tot6to4MappingIn.value   = 1 if TOT6TO4 else 0
-    dut.TotDualEdgeCountIn.value = 1 if TOT_DUAL_EDGE else 0
-    dut.HitSampleModeIn.value    = 0          # edge-sensitive (async) hit sampling
-    dut.EnSeuCountIn.value       = 0          # disable SEU counting
-    dut.PixelConfDefaultIn.value = 1          # use hard-wired default pixel configuration
-    dut.PixelConfAddrIn.value    = 0          # pixel config address (12-bit)
-    dut.PixelConfWr5bitIn.value  = 0          # no config write
-    dut.PixelConfWr3bitIn.value  = 0          # no config write
-    dut.PixelConfDataWrIn.value  = 0          # config write data (8-bit)
-    dut.PixelConfDataRdIn.value  = 0          # readback data from previous core (8-bit)
-    dut.CalEdgeIn.value          = 0          # no calibration edge
-    dut.CalAuxIn.value           = 0          # no calibration aux
-    dut.HitOrIn.value            = 0          # no hit-ORs from previous core (4-bit)
-    dut.LatCntIn.value           = 0          # BX timestamp (9-bit)
-    dut.LatCntReqIn.value        = 0          # delayed BX timestamp (9-bit)
-    dut.TrigIn.value             = 0
-    dut.TrigClearIn.value        = 0
-    dut.TrigIdIn.value           = 0          # trigger ID (8-bit)
-    dut.TrigIdReqIn.value        = 1          # trigger ID request (8-bit)
-    dut.TokIn.value              = 0          # no token from previous core
-    dut.ReadIn.value             = 0          # no read request
-    dut.RegionAddrIn.value       = 0          # region address from previous core (10-bit)
-    dut.RegionDataIn.value       = 0          # region data from previous core (16-bit)
-
-    await Timer(1, unit="ns")
-
-
-    # --- Reset ---
-    await reset_dut(dut)
-    dut._log.info("Reset complete")
-
-  #   # --- Start latency counters (with latency = 20) ---
-
-    cocotb.start_soon(generate_latency_counters(dut)) # use new one
-    await wait_clks(dut, 3)  # let counters stabilize
-
-  #   # =========================================================================
-  #   # TEST 1: Single pixel hit, short duration (e.g., 3 BX on pixel 0)
-  #   # =========================================================================
-    dut._log.info("="*60)
-    dut._log.info("TEST 1: Hit pixel 0 for 3 BX clocks")
-    dut._log.info("="*60)
-
-    hit_duration = 3  # BX clocks
-    pixel_mask = 1  # pixel 0 only
-
-  #   # Inject hit
-    dut.AnaHit.value = pixel_mask # tb injection, let px 1 fire
-    await wait_clks(dut, 1) # wait one then start counting
-    dut._log.info(dut.pix_hit.value)
-    LatCntTime = dut.LatCntIn.value
-    await wait_clks(dut, hit_duration - 1)
-    dut.AnaHit.value = 0
-    
-    while LatCntTime != dut.LatCntReqIn.value:
-      await RisingEdge(dut.ClkIn)  # wait until bcid matches after latency
-    
-    dut.TrigIn.value = 1
-    dut.TrigIdIn.value = 1
-    await RisingEdge(dut.ClkIn)  # clock 3: counter_last fires, Trig is high -> triggered!
-    dut.TrigIn.value = 0
-    dut.TrigIdReqIn.value = 0 # change to different 
-
-  #   # Wait a bit (prolly don't need long 0-2)
-    await wait_clks(dut, 8)
-
-    dut.TrigIdReqIn.value = 1 # now match the TrigId request
-    dut.ReadIn.value = 1
-    await wait_clks(dut, 1) 
-    dut.TrigIdReqIn.value = 0 # then switch off
-    # await wait_clks(dut, 3)  # give plenty of time
-    
-
-    # Try to read (cheat, probe in and see if we are seeing value)
-    # try:
-    #     dtce = dut.LatencyMem.DataToCoreEn.value
-    #     dut._log.info(f"DataToCoreEn = {dtce}")
-    # except AttributeError:
-    #     pass
-
-    # try:
-    #     rtr = dut.LatencyMem.ready_to_read.value
-    #     dut._log.info(f"ready_to_read = {rtr}")
-    # except AttributeError:
-    #     pass
-
-    # Read out data
-    # dut.ReadIn.value = 1
-    # await RisingEdge(dut.ClkIn)
-    # dut.ReadIn.value = 0
-    # await wait_clks(dut, 8)
-    
     try:
-        data = dut.RegionDataOut.value.integer
-    except ValueError:
-        data = 0
-        dut._log.warning("DataToCore has X/Z values")
+        # ------------------------------------------------------------
+        # Static signal initialization
+        # ------------------------------------------------------------
+        dut.ResetIn_b.value          = 1
+        dut.AnaHit.value             = 0
 
-    dut.ReadIn.value = 0
-    tots = decode_region_data(data)
-    dut._log.info(f"DataToCore = 0x{data:04x}, ToT values = {tots}")
-    dut._log.info(f"  Pixel 0 ToT = {tots[0]}")
-    dut._log.info(f"  Pixel 1 ToT = {tots[1]} (expect 15 = no hit)")
-    dut._log.info(f"  Pixel 2 ToT = {tots[2]} (expect 15 = no hit)")
-    dut._log.info(f"  Pixel 3 ToT = {tots[3]} (expect 15 = no hit)")
-    dut._log.info(f"  Pixel 0 ToT = {dut.region_data_bus.value}")
+        dut.CoreRowAddrIn.value      = 0
 
+        dut.AnaInjectionModeIn.value = 0
+        dut.EnDigHitIn.value         = 0
+        dut.Tot6to4MappingIn.value   = 1 if TOT6TO4 else 0
+        dut.TotDualEdgeCountIn.value = 1 if TOT_DUAL_EDGE else 0
+        dut.HitSampleModeIn.value    = 0
+        dut.EnSeuCountIn.value       = 0
 
-    await wait_clks(dut, 5)
-    dut.ReadIn.value = 0
+        dut.PixelConfDefaultIn.value = 1
+        dut.PixelConfAddrIn.value    = 0
+        dut.PixelConfWr5bitIn.value  = 0
+        dut.PixelConfWr3bitIn.value  = 0
+        dut.PixelConfDataWrIn.value  = 0
+        dut.PixelConfDataRdIn.value  = 0
 
-  
-  # # =========================================================================
-  #   # TEST 2: Two overlapping hits, then read out one by one
-  #   #   Hit 1: mask 1010, 8 BX total, TrigId = 1
-  #   #   Hit 2: mask 1111, starts 3 BX later, ends same time as Hit 1 (5 BX), TrigId = 2
-  #   # =========================================================================
-  #   dut._log.info("="*60)
-  #   dut._log.info("TEST 2: Overlapping hits (1010 for 8BX, 1111 for 5BX), read 1-by-1")
-  #   dut._log.info("="*60)
+        dut.CalEdgeIn.value          = 0
+        dut.CalAuxIn.value           = 0
 
-  #   # ---------- Drive both overlapping hits on the shared Hit bus ----------
-  #   mask1 = 0b1010
-  #   mask2 = 0b0101
+        dut.HitOrIn.value            = 0
 
-  #   # Start Hit 1 (TrigId latched for entry 1)
-  #   dut.TrigId.value = 1
-  #   dut.Hit.value = mask1
-  #   await wait_clks(dut, 1)          # wait one then start counting (entry 1)
-  #   LatCntTime1 = dut.LatCnt.value   # timestamp for hit 1
+        dut.LatCntIn.value           = 0
+        dut.LatCntReqIn.value        = 0
 
-  #   # 3 cycles after hit 1 started, hit 2 begins -> bus carries mask1 | mask2
-  #   await wait_clks(dut, 2)          # already advanced 1, need 2 more to reach +3
-  #   dut.TrigId.value = 2
-  #   dut.Hit.value = mask1 | mask2    # overlap region
-  #   await wait_clks(dut, 1)          # wait one then start counting (entry 2)
-  #   LatCntTime2 = dut.LatCnt.value   # timestamp for hit 2
+        dut.TrigIn.value             = 0
+        dut.TrigClearIn.value        = 0
+        dut.TrigIdIn.value           = 0
+        dut.TrigIdReqIn.value        = 0
 
-  #   # Both end together: hit 1 total = 8 BX. We've used 1 + 2 + 1 = 4 BX so far.
-  #   await wait_clks(dut, 8 - 4)      # remaining BX until both fall
-  #   dut.Hit.value = 0
+        dut.TokIn.value              = 0
+        dut.ReadIn.value             = 0
 
-  #   # ---------- Trigger entry 1 at its latency match ----------
-  #   while LatCntTime1 != dut.LatCntReq.value:
-  #       await RisingEdge(dut.Clk)    # wait until bcid matches after latency
-  #   dut.TrigId.value = 1
-  #   dut.Trig.value = 1
-  #   await RisingEdge(dut.Clk)        # counter_last fires, Trig high -> triggered (entry 1)
-  #   dut.Trig.value = 0
+        dut.RegionAddrIn.value       = 0
+        dut.RegionDataIn.value       = 0
 
-  #   # ---------- Trigger entry 2 at its latency match (3 BX later) ----------
-  #   while LatCntTime2 != dut.LatCntReq.value:
-  #       await RisingEdge(dut.Clk)    # wait until bcid matches after latency
-  #   dut.TrigId.value = 2
-  #   dut.Trig.value = 1
-  #   await RisingEdge(dut.Clk)        # counter_last fires, Trig high -> triggered (entry 2)
-  #   dut.Trig.value = 0
-  #   dut.TrigIdReq.value = 0          # parked at non-matching
+        # Optional analog front-end bias inout pins.
+        # These only exist depending on ATLAS_CHIP / CMS_CHIP compile defines.
+        # Drive to 0 for deterministic simulation unless another model drives them.
+        def set_if_exists(sig_name, value=0):
+            try:
+                getattr(dut, sig_name).value = value
+            except AttributeError:
+                pass
 
-  #   await wait_clks(dut, 8)
+        # ATLAS_CHIP analog inouts
+        set_if_exists("VBP_PREAMP_A", 0)
+        set_if_exists("VBP_PREAMP_B", 0)
+        set_if_exists("VBN_COMP", 0)
+        set_if_exists("VBN_PRECOMP", 0)
+        set_if_exists("VTH1", 0)
+        set_if_exists("VTH2", 0)
+        set_if_exists("VBN_LCC", 0)
+        set_if_exists("VBP_VFF", 0)
+        set_if_exists("VCTRL_CF0", 0)
+        set_if_exists("VCTRL_LCC", 0)
+        set_if_exists("VCAL_HI", 0)
+        set_if_exists("VCAL_MI", 0)
 
-  #   # ---------- READ 1: select TrigId = 1 ----------
-  #   dut.TrigIdReq.value = 1          # match first TrigId
-  #   await wait_clks(dut, 1)
-  #   dut.TrigIdReq.value = 0          # switch off
-  #   await wait_clks(dut, 5)
+        # CMS_CHIP analog inouts
+        set_if_exists("IPA_A", 0)
+        set_if_exists("IPA_B", 0)
+        set_if_exists("ICOMP", 0)
+        set_if_exists("ICOMP_STAR", 0)
+        set_if_exists("VTH", 0)
+        set_if_exists("VREF_KRUM", 0)
+        set_if_exists("IHU_KRUM", 0)
+        set_if_exists("IHD_KRUM", 0)
+        set_if_exists("IFC", 0)
+        set_if_exists("ILDAC_MIR", 0)
 
-  #   try:
-  #       dut._log.info(f"DataToCoreEn = {dut.LatencyMem.DataToCoreEn.value}")
-  #   except AttributeError:
-  #       pass
-  #   try:
-  #       dut._log.info(f"ready_to_read = {dut.LatencyMem.ready_to_read.value}")
-  #   except AttributeError:
-  #       pass
+        await Timer(1, unit="ns")
 
-  #   dut.Read.value = 1
-  #   await RisingEdge(dut.Clk)
-  #   try:
-  #       data = dut.DataToCore.value.integer
-  #   except ValueError:
-  #       data = 0
-  #       dut._log.warning("DataToCore has X/Z values")
-  #   dut.Read.value = 0
+        # ------------------------------------------------------------
+        # Reset
+        # ------------------------------------------------------------
+        await reset_dut(dut)
+        dut._log.info("Reset complete")
 
-  #   tots = decode_region_data(data)
-  #   dut._log.info(f"READ 1 (TrigId=1, mask 1010): DataToCore = 0x{data:04x}, ToT values = {tots}")
-  #   dut._log.info(f"  Pixel 0 ToT = {tots[0]} (expect 15 = no hit)")
-  #   dut._log.info(f"  Pixel 1 ToT = {tots[1]} (HIT)")
-  #   dut._log.info(f"  Pixel 2 ToT = {tots[2]} (expect 15 = no hit)")
-  #   dut._log.info(f"  Pixel 3 ToT = {tots[3]} (HIT)")
+        # ------------------------------------------------------------
+        # Start latency counters
+        # ------------------------------------------------------------
+        cnt_task = cocotb.start_soon(generate_latency_counters(dut))
+        await wait_clks(dut, 3)
 
-  #   await wait_clks(dut, 5)
+        # ------------------------------------------------------------
+        # TEST 1: Single hit into pixel 0 / region 0
+        # ------------------------------------------------------------
+        dut._log.info("=" * 60)
+        dut._log.info("TEST 1: Hit pixel 0 for 4 BX clocks")
+        dut._log.info("=" * 60)
 
-  #   # ---------- READ 2: select TrigId = 2 ----------
-  #   dut.TrigIdReq.value = 2          # match second TrigId
-  #   await wait_clks(dut, 1)
-  #   dut.TrigIdReq.value = 0          # switch off
-  #   await wait_clks(dut, 5)
+        hit_duration = 4
+        pixel_mask = PIXEL_MASK
 
-  #   try:
-  #       dut._log.info(f"DataToCoreEn = {dut.LatencyMem.DataToCoreEn.value}")
-  #   except AttributeError:
-  #       pass
-  #   try:
-  #       dut._log.info(f"ready_to_read = {dut.LatencyMem.ready_to_read.value}")
-  #   except AttributeError:
-  #       pass
+        # Keep trigger ID stable for this simple test.
+        dut.TrigIdIn.value = 1
+        dut.TrigIdReqIn.value = 0
 
-  #   dut.Read.value = 1
-  #   await RisingEdge(dut.Clk)
-  #   try:
-  #       data = dut.DataToCore.value.integer
-  #   except ValueError:
-  #       data = 0
-  #       dut._log.warning("DataToCore has X/Z values")
-  #   dut.Read.value = 0
+        # Inject hit.
+        dut.AnaHit.value = pixel_mask
+        await wait_clks(dut, 1)
 
-  #   tots = decode_region_data(data)
-  #   dut._log.info(f"READ 2 (TrigId=2, mask 0101): DataToCore = 0x{data:04x}, ToT values = {tots}")
-  #   dut._log.info(f"  Pixel 0 ToT = {tots[0]} (HIT)")
-  #   dut._log.info(f"  Pixel 1 ToT = {tots[1]} ")
-  #   dut._log.info(f"  Pixel 2 ToT = {tots[2]} (HIT)")
-  #   dut._log.info(f"  Pixel 3 ToT = {tots[3]} ")
+        latcnt_time = str(dut.LatCntIn.value)
+        dut._log.info(f"Injected AnaHit mask = {pixel_mask:#x}")
+        dut._log.info(f"Captured hit LatCntIn = {latcnt_time}")
 
-  #   await wait_clks(dut, 5)
+        await wait_clks(dut, hit_duration - 1)
+        dut.AnaHit.value = 0
 
-    dut._log.info("All tests complete.")
+        # ------------------------------------------------------------
+        # Wait until LatCntReqIn matches captured LatCntIn
+        # ------------------------------------------------------------
+        matched = False
+        for _ in range(200):
+            if str(dut.LatCntReqIn.value) == latcnt_time:
+                matched = True
+                break
+            await RisingEdge(dut.ClkIn)
+
+        if not matched:
+            dut._log.error(f"Timeout waiting for LatCntReqIn to match captured LatCntIn={latcnt_time}")
+            assert False, "Latency counter request never matched captured hit timestamp"
+
+        dut._log.info(f"Latency match found: LatCntReqIn={dut.LatCntReqIn.value}")
+
+        # ------------------------------------------------------------
+        # Issue trigger
+        # ------------------------------------------------------------
+        dut.TrigIdIn.value = 1
+        dut.TrigIn.value = 1
+        await RisingEdge(dut.ClkIn)
+        dut.TrigIn.value = 0
+
+        dut._log.info("Trigger issued")
+
+        # Wait for region data to become valid.
+        await wait_clks(dut, 8)
+
+        # ------------------------------------------------------------
+        # Select trigger ID and assert ReadIn
+        # ------------------------------------------------------------
+        dut.TrigIdReqIn.value = 1
+        dut.ReadIn.value = 1
+        # Clock read through.
+        await RisingEdge(dut.ClkIn)
+        await RisingEdge(dut.ClkIn)
+
+        if val_has_unknown(dut.RegionDataOut):
+            dut._log.error(f"RegionDataOut has X/Z values: {dut.RegionDataOut.value}")
+            assert False, "RegionDataOut has X/Z values"
+
+        data = dut.RegionDataOut.value.to_unsigned()
+        tots = decode_region_data(data)
+
+        # Region 0 child output is useful as a compact sanity check, but
+        # this test primarily reports the top-level RegionDataOut result.
+        region0_data = dut.PixelRegion[0].PixelRegionLogic.DataToCore.value
+
+        dut._log.info("-" * 60)
+        dut._log.info("RESULT")
+        dut._log.info(f"Region 0 DataToCore = {region0_data}")
+        dut._log.info(f"RegionDataOut       = {dut.RegionDataOut.value}")
+        dut._log.info(f"Decoded RegionDataOut = 0x{data:04x}")
+        dut._log.info(f"ToT values [pixel0, pixel1, pixel2, pixel3] = {tots}")
+        dut._log.info("-" * 60)
+
+        if tots[0] == 0:
+            dut._log.error("Pixel 0 ToT was zero after injecting a hit into pixel 0")
+            assert False, "Expected nonzero ToT for pixel 0"
+
+        if any(tot != 15 for tot in tots[1:]):
+            dut._log.error("Unexpected nonzero ToT in pixels 1-3 (code F/15 means 0)")
+            assert False, "Expected only pixel 0 to have nonzero ToT"
+
+        # ------------------------------------------------------------
+        # Deassert read/request
+        # ------------------------------------------------------------
+        dut.ReadIn.value = 0
+        dut.TrigIdReqIn.value = 0
+
+        await wait_clks(dut, 5)
+
+        dut._log.info("PASS: Single pixel hit propagated to top-level RegionDataOut.")
+
+    # CHAT CAME UP WITH THIS WITHOUT IT I CAN"T GET THE WAVEFORM OUT ICARUS WILL CRASH ON EXIT!!!!!!!!!
+    finally:
+        # Kill background tasks to reduce simulator exit weirdness.
+        if cnt_task is not None:
+            cnt_task.kill()
+        if clk_task is not None:
+            clk_task.kill()

@@ -1023,7 +1023,7 @@ module DigitalCore (
    generate
 
       genvar r ;  // r = 0,1, .. 15
-
+      // maybe move to 1 for temp purposes, need to be able to do testing
       for(r = 0; r < 16; r++) begin: PixelRegion
 
          PixelRegionLogic   PixelRegionLogic (
