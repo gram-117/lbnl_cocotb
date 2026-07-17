@@ -239,6 +239,7 @@ async def pixel_test(dut):
 
         await wait_clks(dut, hit_duration - 1)
         dut.AnaHit.value = 0
+        dut.TokIn.value              = 1 # ADDING TOKEN LOGIC 
 
         # ------------------------------------------------------------
         # Wait until LatCntReqIn matches captured LatCntIn
@@ -272,10 +273,16 @@ async def pixel_test(dut):
         # ------------------------------------------------------------
         # Select trigger ID and assert ReadIn
         # ------------------------------------------------------------
-        dut.TrigIdReqIn.value = 1
+        dut.TrigIdReqIn.value = 1 # match trigger but not ready for readout yet
+        await RisingEdge(dut.ClkIn)
+        dut.TrigIdReqIn.value = 0 # move to a different trigger
+        await wait_clks(dut, 8)
+
+        # adding token logic (was prev pinned low), now should wait until 
+        # prev cores are done reading, only asserts bus for one cycle
+        dut.TokIn.value              = 0 
         dut.ReadIn.value = 1
         # Clock read through.
-        await RisingEdge(dut.ClkIn)
         await RisingEdge(dut.ClkIn)
 
         if val_has_unknown(dut.RegionDataOut):
@@ -319,6 +326,6 @@ async def pixel_test(dut):
     finally:
         # Kill background tasks to reduce simulator exit weirdness.
         if cnt_task is not None:
-            cnt_task.kill()
+            cnt_task.cancel()
         if clk_task is not None:
-            clk_task.kill()
+            clk_task.cancel()
