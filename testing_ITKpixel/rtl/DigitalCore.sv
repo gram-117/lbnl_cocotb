@@ -995,7 +995,7 @@ module DigitalCore (
     
    // ... then enable readout for this core if at least one region asserted the token...
    wire this_core_read ;
-   assign this_core_read = 1'b1;// (TokIn == 1'b0 && TokOut == 1'b1) ? 1'b1 : 1'b0 ; 
+   assign this_core_read = (TokIn == 1'b0 && TokOut == 1'b1) ? 1'b1 : 1'b0 ; 
 
    wire read_region ;
    assign read_region = this_core_read & local_read ;
