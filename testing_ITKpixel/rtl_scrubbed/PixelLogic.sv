@@ -26,8 +26,6 @@
 // [Status]         devel
 //-----------------------------------------------------------------------------------------------------
 
-// GRAMMY: ASSUME ATLAS USE FOR ALL NOT CMS
-
 
 `ifndef PIXEL_LOGIC__SV   // include guard
 `define PIXEL_LOGIC__SV
@@ -35,32 +33,9 @@
 //
 // Dependencies:
 //
-//`include "rtl/common/defines.sv"
-//`include "rtl/common/CgWrapper.v"         // hard-coded clock-gating module
-//`include "rtl/models/models.sv"           // for the full-custom 4-bit multi-bit latch LNQD1shrinkX4
-// ^ GRAMMY: dont have access to need to make my own 
-
-// MODULES THAT WERE REIMPLEMENTED:
-
-// TFF from bottom of this file
-
-// CKLNQD1 cg_cell (.TE (1'b0), .E (Enable), .CP (ClkIn), .Q(ClkOut)); from cgwrapper
-
-// // use custom 4-bit latch            => **CHANGED** to use new cell-based multibit latch
-            // LNQD1shrinkX4_V2   MultiBitLatch (
-
-            //     .EN (       latch_en ),
-            //     .D0 ( latch_input[0] ),
-            //     .D1 ( latch_input[1] ),
-            //     .D2 ( latch_input[2] ),
-            //     .D3 ( latch_input[3] ),
-            //     .Q0 (  tot_mem[k][0] ),
-            //     .Q1 (  tot_mem[k][1] ),
-            //     .Q2 (  tot_mem[k][2] ),
-            //     .Q3 (  tot_mem[k][3] )
-            
-            // ) ;
-//
+`include "rtl/common/defines.sv"
+`include "rtl/common/CgWrapper.v"         // hard-coded clock-gating module
+`include "rtl/models/models.sv"           // for the full-custom 4-bit multi-bit latch LNQD1shrinkX4
 
 `timescale 1ns / 1ps
 //`include "timescale.v"
@@ -102,7 +77,7 @@ module PixelCTRL (
     wire pix_rst ;
 
     //  Pixel state idle flag (when both hit-registering Flops outputs are 2'b00)
-    wire pix_state_idle ;
+    wire pix_state_idle ;                
 
     //
     // Hit-triggered registering FlipFlop.
@@ -141,8 +116,6 @@ module PixelCTRL (
 
     assign pix_rst = Reset_b & (~state_sr[1]) ;
 
-
-// CAN BE IGNORED
 `elsif CMS_CHIP   //_________________________________________________________
 
     CG_MOD CG_rstFF (.ClkIn(PixelClkGated), .Enable (hit_rise), .ClkOut(rst_FF)) ;   
@@ -194,7 +167,6 @@ module TotCounter (
     input  wire Hit,
     input  wire HitTe,
     input  wire CntRst,
-    input  wire Reset_b, // added
     input  wire TotDualEdgeCount,
     input  wire Tot6to4Mapping,
     output wire [3:0] TotCnt,
@@ -207,20 +179,14 @@ module TotCounter (
     assign cnt_rst_b = ~CntRst;
 
     // Counter clock gating. Output clock level is hold on falling adge of Disc
-    reg cnt_clk; // ISSUE WITH COMB LOGIC LOOP DEPENCENCY!!!!!!!!
+    reg cnt_clk;
 
-    // MODIFIED TO ADD RST
-    always_latch begin
-    if (!Reset_b) begin
-        cnt_clk = 1'b0; // changed to <- inside always comb lbock update back to = bcs verilator
-    end
-    else if(Hit && !TotOverflow && !HitTe) begin 
-           cnt_clk = PixelClkGated;
-    end
-    end
-    // ^^ was originally LHQD2 cnt clock latch instead using given code !!!!!
+    //always_latch
+    //    if(Hit && !TotOverflow && !HitTe)
+    //        cnt_clk = PixelClkGated;
+    //
     //LHQD1 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;
-    //LHQD2 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;      // fix residual max_cap/max_tran DRVs
+    LHQD2 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;      // fix residual max_cap/max_tran DRVs
 
     // 6-bits counter
     // in dual edge mode input clock is forwarded to bit 1 FF becouse output bit 0 comes from Disc falling edge phase
@@ -257,43 +223,22 @@ module TotCounter (
     // Output of counter (stage one)
     // in dual edge mode bit 0 is the Disc falling edge phase
     wire [5:0] tot_cnt_stageone;
-    // modify for verilator. tacking on LSB later
-    // assign tot_cnt_stageone = {init_tot_cnt[5:1], (TotDualEdgeCount ? fall_phase : init_tot_cnt[0]) };
-    assign tot_cnt_stageone = {init_tot_cnt[5:1], 1'b0}; // temp 0
+    assign tot_cnt_stageone = {init_tot_cnt[5:1], (TotDualEdgeCount ? fall_phase : init_tot_cnt[0]) };
 
-
-    // icarus is complaining about this part: TRYING TO REPLACE
-    //sorry: constant selects in always_* processes are not currently supported (all bits will be included).
     // 6-to-4 bit converter
-    reg [3:0] tot_cnt_int; // use just for tot overflow, lsb doesnt matter
-    reg [3:0] with_fall_phase;  // seperate for tot out
-    always_comb begin // replaced * with comb
-        if(|tot_cnt_stageone[5:3] && Tot6to4Mapping) begin// or all bits in stgone %% if 6to4enable
+    reg [3:0] tot_cnt_int;
+    always_comb begin
+        if(|tot_cnt_stageone[5:3] && Tot6to4Mapping)
             tot_cnt_int[3:0] = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)};
-            // this looks like shit but its verilators fault account for falling phase lsb
-            if (fall_phase) begin
-                with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h1)}; 
-            end
-            else begin
-                with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)}; 
-            end
-        end
-        else begin
+        else
             tot_cnt_int[3:0] = tot_cnt_stageone[3:0];
-            with_fall_phase = {tot_cnt_stageone[3:1], 1'b1}; // holy shit *** take a look
-        end
     end
-
-    
 
     // Overflow detector
     assign TotOverflow = (tot_cnt_int[3:1] == 3'b111); // x=='d14 || x=='d15
 
     // exclude 0x0f from output encoding: Reserved for "No data present" code.
-
-    assign TotCnt = (&(with_fall_phase[3:1]) ? {with_fall_phase[3:1], 1'b0} : 
-            with_fall_phase);
-    // ^ if all ones then make the last 1 0
+    assign TotCnt = (&(tot_cnt_int[3:1]) ? {tot_cnt_int[3:1], 1'b0} : tot_cnt_int);
     
 endmodule: TotCounter
 
@@ -313,7 +258,7 @@ module TotMemory (
     input  wire PixelClkGated,        
     input  wire HitLe,
     input  wire HitTe,
-    input  wire HitLeAny,
+    input  wire HitLeAny,        
     input  wire [`LATENCY_MEM_DEPTH-1:0] TotMemWriteAddr,
     input  wire [`LATENCY_MEM_DEPTH-1:0] TotMemReadAddr,
     input  wire [3:0] TotMemDataIn,
@@ -341,8 +286,6 @@ module TotMemory (
     //////////////////////////////////////
     //   per-pixel ToT latency memory   //
     //////////////////////////////////////    
-    // REASON MEM TAkes SO LONG TO UPDATE: 
-    // latch condition: needs TE to go high (sync) then clock to go low (falling edge)
     generate
         genvar k;
         for (k=0; k<`LATENCY_MEM_DEPTH; k=k+1)  begin : TotMem
@@ -365,7 +308,7 @@ module TotMemory (
             // use custom 4-bit latch            => **CHANGED** to use new cell-based multibit latch
             LNQD1shrinkX4_V2   MultiBitLatch (
 
-                .EN (      latch_en ), // active low? needs clock to be low, HitTe
+                .EN (       latch_en ),
                 .D0 ( latch_input[0] ),
                 .D1 ( latch_input[1] ),
                 .D2 ( latch_input[2] ),
@@ -384,36 +327,24 @@ module TotMemory (
     //   data readout   //
     //////////////////////
 
-    // wire [3:0] tot_mem_out [`LATENCY_MEM_DEPTH-1:0] ;
+    wire [3:0] tot_mem_out [`LATENCY_MEM_DEPTH-1:0] ;
 
-    // generate
-    //    genvar m ;
+    generate
+       genvar m ;
 
-    //    for(m = 0; m < `LATENCY_MEM_DEPTH; m++) begin : TotMemOut
+       for(m = 0; m < `LATENCY_MEM_DEPTH; m++) begin : TotMemOut
 
-    //       if(m == 0)
-    //          assign tot_mem_out[m] = tot_mem[m] & {4{TotMemReadAddr[m]}} ;
-    //       else
-    //          assign tot_mem_out[m] = ( tot_mem[m] & {4{TotMemReadAddr[m]}} ) | tot_mem_out[m-1] ;
+          if(m == 0)
+             assign tot_mem_out[m] = tot_mem[m] & {4{TotMemReadAddr[m]}} ;
+          else
+             assign tot_mem_out[m] = ( tot_mem[m] & {4{TotMemReadAddr[m]}} ) | tot_mem_out[m-1] ;
 
-    //    end
-    // endgenerate 
+       end
+    endgenerate 
     
-    // // output data
-    // assign TotMemDataOut[3:0] = tot_mem_out[`LATENCY_MEM_DEPTH-1][3:0] ;
-
-    // ^^ replicate the above code
-    logic [3:0] tot_mem_dataout;
-
-    always_comb begin
-    tot_mem_dataout = 4'b0;
-    for (int m = 0; m < `LATENCY_MEM_DEPTH; m++) begin
-        tot_mem_dataout |= (tot_mem[m] & {4{TotMemReadAddr[m]}});
-    end
-    end
-
-    assign TotMemDataOut[3:0] = tot_mem_dataout;
-        
+    // output data
+    assign TotMemDataOut[3:0] = tot_mem_out[`LATENCY_MEM_DEPTH-1][3:0] ;
+    
 endmodule: TotMemory
 
 //
@@ -428,6 +359,7 @@ endmodule: TotMemory
 //                                                                       "Y88888P'                  
 //                                                                                                 
 module PixelLogic (
+
     // clock and reset
     output logic PixelClkEn,                                // per-pixel clock-gating enable generated either from hit (clock-gating is then common to all pixels in the pixel-region)
     input  wire PixelClkGated,                              // region-level gated clock activated either by HitLeAny or by PixelClkEn
@@ -437,19 +369,20 @@ module PixelLogic (
     input  wire Tot6to4Mapping,                             // enable/disable 6b/4b ToT encoding with dual-slope mapping
     input  wire TotDualEdgeCount,                           // enable/disable ToT counting at 80 MHz using dual-edge 
 
-// `ifdef CMS_CHIP
-//     input  wire HitSampleMode,                              // choose hit sampling mode between edge-sensitive aka "asynchronous" (0) and level-sensitive aka "synchronous" (1)
-// `endif
+`ifdef CMS_CHIP
+    input  wire HitSampleMode,                              // choose hit sampling mode between edge-sensitive aka "asynchronous" (0) and level-sensitive aka "synchronous" (1)
+`endif
 
     // hit/ToT control logic
     input  wire Hit,                                        // hit pulse, either from analog front-end or from digital injection
     output wire HitLe,                                      // leading-edge of the hit pulse dectected (single pulse)
     input  wire HitLeAny,                                   // OR of HitLe flags from all 1x4 pixels, generated in the 1x4 pixel-region, used to enable clock-gating
  
-    // write/read to/from ToT memory (LATENCY_MEM currently set to 8!!!!)
+    // write/read to/from ToT memory
     input  wire [`LATENCY_MEM_DEPTH-1:0] TotMemWriteAddr,   // write pointer from the common latency buffer: in which memory slot the ToT must be saved (same for all pixels)
     input  wire [`LATENCY_MEM_DEPTH-1:0] TotMemReadAddr,    // read pointer from the common latency buffer: from which memory location ToT is retrieved when a trigger arrives (same for all pixels)
     output wire [3:0] TotMemDataOut                         // 4-bit ToT value extracted from ToT latency memory
+ 
     ) ;
     
     ///////////////////////////////////////////////////////////////
@@ -471,6 +404,7 @@ module PixelLogic (
     //                     \___________________________/              pix_rst => synch.
     //                      _   _   _   _   _   _   _   
     //   __________________/ \_/ \_/ \_/ \_/ \_/ \_/ \_____________   cnt_clk = PixelClkGated latched by (Hit && !TotOverflow)
+    
 
     wire tot_overflow;
     wire HitTe;
@@ -503,7 +437,6 @@ module PixelLogic (
         .Hit              (              Hit ),
         .HitTe            (            HitTe ),
         .CntRst           (           CntRst ),
-        .Reset_b          (           Reset_b),
         .TotDualEdgeCount ( TotDualEdgeCount ),
         .Tot6to4Mapping   (   Tot6to4Mapping ),
         .TotCnt           (     tot_cnt[3:0] ),
@@ -527,30 +460,32 @@ module PixelLogic (
 
 endmodule : PixelLogic
 
-// //////////////////////////////////////
-// //   custom Toggle FlipFlop (TFF)   //
-// //////////////////////////////////////
-// module TFF_NCLK_NRST (
-//     input  wire nclk,   // negative edge-triggered FF
-//     input  wire nrst,   // asynchronous reset, active-low
-//     output logic q,
-//     output logic qn
-//     ) ;
+//////////////////////////////////////
+//   custom Toggle FlipFlop (TFF)   //
+//////////////////////////////////////
+module TFF_NCLK_NRST (
+    input  wire nclk,   // negative edge-triggered FF
+    input  wire nrst,   // asynchronous reset, active-low
+    output logic q,
+    output logic qn
+    ) ;
 
-//     DFNCND1 q_reg (.CDN(nrst), .CPN(nclk), .D(qn), .Q(q), .QN(qn));
+    DFNCND1 q_reg (.CDN(nrst), .CPN(nclk), .D(qn), .Q(q), .QN(qn));
 
-//    // synopsys dc_script_begin
-//    // set_dont_touch q
-//    // synopsys dc_script_end
+   // synopsys dc_script_begin
+   // set_dont_touch q
+   // synopsys dc_script_end
 
-//     /*always_ff @(negedge nclk or negedge nrst) begin
-//         if(~nrst)
-//             q <= 1'b0 ;
-//         else
-//             q <= !q ;
-//     end
-//     *
-//      endmodule : TFF_NCLK_NRST
+    /*always_ff @(negedge nclk or negedge nrst) begin
+        if(~nrst)
+            q <= 1'b0 ;
+        else
+            q <= !q ;
+    end
+
+    */
+
+endmodule : TFF_NCLK_NRST
 
 //////////////////////////////////////
 //   custom Set 1 FlipFlop (SFF)   //
@@ -570,6 +505,5 @@ module SFF_NCLK_NRST(
         else
             q <= 1;
 endmodule
-
 
 `endif   // PIXEL_LOGIC__SV

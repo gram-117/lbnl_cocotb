@@ -116,6 +116,11 @@
 `define REGION_ADDRESS_BITS   (`CORE_ROW_ADDRESS_BITS + 4)   // 6-bit core-row address + 4-bit pixel-region address to identify a pixel-region out of 16 in a single core 
 `define REGION_DATA_BITS      16                             // 4-bit ToT code per-pixel x 4 pixels per-region
 
+// NEW GRAMMY;
+`define CORE_ADDR_BITS 6 // assuming 64 cores for now
+`define PACKET_SIZE (`CORE_ADDR_BITS + `TRIG_ID_BITS + `REGION_DATA_BITS) // 6 + 8 + 16 = 30
+`define NETWORK_MEM_DEPTH 5 // tbd
+
 
 ////////////////////////////////////////////////////////////////////////////
 //   simulation control macros (should be moved into simulation area ?)   //

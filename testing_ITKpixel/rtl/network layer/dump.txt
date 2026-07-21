@@ -1,0 +1,92 @@
+// digtal core Modified interface
+
+// NetworkedCore.sv [RTL]
+// NaN
+// [Language]       SystemVerilog 2012 [IEEE Std. 1800-2012]
+// hierarchy -> sits above digitalcore.sv
+
+// description: 
+// Networked core wraps rd53c and is responsible for buffering/routing locally 
+// generated ToT packets and acting as part of the transport mesh for all packets
+// which get routed into it
+
+
+// notes:
+/*
+TODO: 
+FIGURE OUT CONFIG STUFF
+
+
+
+*/
+
+
+
+
+module NetworkedCore (
+   /////////////////////////////
+   //   hits from testbench   //
+   ///////////////////////////// 
+   input wire [63:0] AnaHit,                // 8 x 8 pixels per-core
+
+   // DIFF front-end
+   inout wire [7:0] VBP_PREAMP_A,
+   inout wire [7:0] VBP_PREAMP_B,
+   inout wire [7:0] VBN_COMP,
+   inout wire [7:0] VBN_PRECOMP,
+   inout wire [7:0] VTH1,
+   inout wire [7:0] VTH2,
+   inout wire [7:0] VBN_LCC,
+   inout wire [7:0] VBP_VFF,
+   inout wire [7:0] VCTRL_CF0,
+   inout wire [7:0] VCTRL_LCC,
+   inout wire [7:0] VCAL_HI,
+   inout wire [7:0] VCAL_MI,
+
+
+   /////////////////////////
+   //   clock and reset   //
+   /////////////////////////
+   input  wire ClkIn,
+   output wire ClkOut,
+
+   input  wire ResetIn_b,
+   output wire ResetOut_b,
+
+
+   ///////////////////////////////
+   //   configuration section   //
+   ///////////////////////////////
+
+   // static core-row addressing
+   input  wire [5:0] CoreRowAddrIn, // static core-row address for readout and clock-skew compensation i.e. 6-bit to address 48 (42) core-rows in ATLAS (CMS) chip
+   output wire [5:0] CoreRowAddrOut,
+   
+
+   // go over global config bits with Timon.... TODO
+
+   /////////////////////////////
+   //   calibration section   //
+   /////////////////////////////
+
+   // calibration signals
+   input  wire CalEdgeIn,      // global signal for first analog injection (needs fine timing), also used for "digital injection"
+   output wire CalEdgeOut,
+
+   input  wire CalAuxIn,       // global signal for (optional) second analog injection (not critical timing)
+   output wire CalAuxOut,
+
+   input  wire [`LATENCY_COUNTER_BITS-1:0] LatCntIn,      // BX timestamp
+   output wire [`LATENCY_COUNTER_BITS-1:0] LatCntOut,
+   input  wire [`LATENCY_COUNTER_BITS-1:0] LatCntReqIn,   // BX timestamp shifted back in time by trigger latency
+   output wire [`LATENCY_COUNTER_BITS-1:0] LatCntReqOut,
+
+   input  wire TrigIn,
+   output wire TrigOut,
+   // TODO look at trig clear usage
+   input  wire TrigClearIn,
+   output wire TrigClearOut,
+
+   input  wire [`REGION_DATA_BITS-1:0]    RegionDataIn,       // triggered pixel-region ToT values (from previous core and to next core after internal bus arbitration)
+   output wire [`REGION_DATA_BITS-1:0]    RegionDataOut,
+)

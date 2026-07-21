@@ -10,13 +10,17 @@ TOPLEVEL_LANG ?= verilog # just set to verilog, sv works
 PROJ_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 
 # HDL sources
-VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/rtl/files.f))
+VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/sim/files.f))
+# VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/sim/files_stub.f))
 
 # # Top-level module name in the HDL
 # # Python test module (file name without .py)
 
-MODULE := pixel_core_test_top
-TOPLEVEL := DigitalCore
+MODULE := net_core_top
+TOPLEVEL := NetworkedCore
+
+# MODULE := pixel_core_test_top
+# TOPLEVEL := DigitalCore
 
 # MODULE := pixelregion_test_top
 # TOPLEVEL := PixelRegionLogic
