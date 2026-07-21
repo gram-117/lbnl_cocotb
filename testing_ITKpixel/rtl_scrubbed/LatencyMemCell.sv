@@ -53,7 +53,6 @@ module LatencyMemCell (
     input  wire Trig,                                    // L1A trigger
     input  wire TrigClear,                               // double-trigger support (ATLAS chip)
     input  wire [`TRIG_ID_BITS-1:0] TrigId,              // trigger timestamp
-    input  wire [`TRIG_ID_BITS-1:0] TrigIdReq,           // trigger request timestamp
  
     // output flags
     output wire ClkLatMemEn,                             // clock-gating enable also sent to shared-logic
@@ -62,14 +61,11 @@ module LatencyMemCell (
  
     ) ;
  
- 
     wire gated_clk ;   // gated clock for the entire logic, generated at the end of the module
- 
  
     //////////////////////////////////////////
     //   timestamp memory slot (register)   //
     //////////////////////////////////////////
- 
     //
     // **REM: Each "timestamp slot" (also referred to as "latency timer" or "latency counter" in the documentation
     //        but it is NOT a per-region counter, just a bank of registers).

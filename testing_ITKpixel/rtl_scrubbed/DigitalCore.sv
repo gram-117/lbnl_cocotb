@@ -50,6 +50,13 @@
 // this is the biggest change right now, treats digital injections as hits at core level
 // also quad front or whatever is commented out but should just be for applying bias
 
+// WHAT NEEDS TO CHANGE TO WORK WITH THE NETWORK MEMORY:
+// NEED A SIMPLE INTERFACE: IS THERE DATA? CAN I HAVE IT
+// NETWORK LAYER CAN ALWAYS READ FROM THE LOCAL MEMORY PIN THE TOKEN HIGH 
+// AND ALWAYS LET IT READOUT 
+// 
+//
+
 
 // `include "rtl/common/defines.sv"
 
@@ -97,24 +104,6 @@ module DigitalCore (
    inout wire [7:0] VCAL_HI,
    inout wire [7:0] VCAL_MI,
 
-`elsif CMS_CHIP
-
-   // LIN front-end
-   inout wire [7:0] IPA_A,
-   inout wire [7:0] IPA_B,
-   inout wire [7:0] ICOMP,
-   inout wire [7:0] ICOMP_STAR,
-   inout wire [7:0] VTH,
-   inout wire [7:0] VREF_KRUM,
-   inout wire [7:0] IHU_KRUM,
-   inout wire [7:0] IHD_KRUM,
-   inout wire [7:0] IFC,
-   inout wire [7:0] ILDAC_MIR,
-   inout wire [7:0] VCAL_HI,
-   inout wire [7:0] VCAL_MI,
-
-`endif
-
    /////////////////////////
    //   clock and reset   //
    /////////////////////////
@@ -133,35 +122,36 @@ module DigitalCore (
    input  wire [5:0] CoreRowAddrIn, // static core-row address for readout and clock-skew compensation i.e. 6-bit to address 48 (42) core-rows in ATLAS (CMS) chip
    output wire [5:0] CoreRowAddrOut,
 
+  // Add back if needed, assumed to be handled elsewhere
    // global configuration
-   input  wire AnaInjectionModeIn,  // uniform/alternating charge-injection mode selection
-   output wire AnaInjectionModeOut,
-   input  wire EnDigHitIn,          // digital injection = 1'b1, analog injection = 1'b0
-   output wire EnDigHitOut,
-   input  wire Tot6to4MappingIn,    // enable/disable dual-slope 6b/4b ToT mapping
-   output wire Tot6to4MappingOut,
-   input  wire TotDualEdgeCountIn,  // enable/disable ToT counting at 80 MHz using dual-edge
-   output wire TotDualEdgeCountOut,
-   input  wire HitSampleModeIn,     // set hit sampling mode between edge-sensitive aka "asynchronous" (0) and level-sensitive aka "synchronous" (1)
-   output wire HitSampleModeOut,
+  //  input  wire AnaInjectionModeIn,  // uniform/alternating charge-injection mode selection
+  //  output wire AnaInjectionModeOut,
+  //  input  wire EnDigHitIn,          // digital injection = 1'b1, analog injection = 1'b0
+  //  output wire EnDigHitOut,
+  //  input  wire Tot6to4MappingIn,    // enable/disable dual-slope 6b/4b ToT mapping
+  //  output wire Tot6to4MappingOut,
+  //  input  wire TotDualEdgeCountIn,  // enable/disable ToT counting at 80 MHz using dual-edge
+  //  output wire TotDualEdgeCountOut,
+  //  input  wire HitSampleModeIn,     // set hit sampling mode between edge-sensitive aka "asynchronous" (0) and level-sensitive aka "synchronous" (1)
+  //  output wire HitSampleModeOut,
    
-   // **NOTE* CMS-only extra pin to enable SEU-counting, simple left unconnected for ATLAS (removed ifdef CMS_CHIP to have same digital I/O interface)
-   input  wire EnSeuCountIn,
-   output wire EnSeuCountOut,
+  //  // **NOTE* CMS-only extra pin to enable SEU-counting, simple left unconnected for ATLAS (removed ifdef CMS_CHIP to have same digital I/O interface)
+  //  input  wire EnSeuCountIn,
+  //  output wire EnSeuCountOut,
 
-   // per-pixel default/external configuration
-   input  wire        PixelConfDefaultIn,      // global MUX control to switch between hard-wired default pixel configuration or Pixel Configuration Register (PCR) data
-   output wire        PixelConfDefaultOut,
-   input  wire [11:0] PixelConfAddrIn,         // full address of a pixel to be configured i.e. 12-bit = 6-bit core-row + 4-bit pixel-region + 2-bit pixel address per-region
-   output wire [11:0] PixelConfAddrOut,
-   input  wire        PixelConfWr5bitIn,       // write configuration = 1'b1, read configuration = 1'b0 => write configuration for trimming DAC only to speedup S-curves
-   input  wire        PixelConfWr3bitIn,       // write configuration = 1'b1, read configuration = 1'b0 => write configuration for remaining bits
-   output wire        PixelConfWr5bitOut,
-   output wire        PixelConfWr3bitOut,
-   input  wire  [7:0] PixelConfDataWrIn,       // 8-bit configuration data
-   output wire  [7:0] PixelConfDataWrOut,
-   input  wire  [7:0] PixelConfDataRdIn,       // 8-bit readback configuration data **WARN: actual values, not latched values !
-   output wire  [7:0] PixelConfDataRdOut,
+  //  // per-pixel default/external configuration
+  //  input  wire        PixelConfDefaultIn,      // global MUX control to switch between hard-wired default pixel configuration or Pixel Configuration Register (PCR) data
+  //  output wire        PixelConfDefaultOut,
+  //  input  wire [11:0] PixelConfAddrIn,         // full address of a pixel to be configured i.e. 12-bit = 6-bit core-row + 4-bit pixel-region + 2-bit pixel address per-region
+  //  output wire [11:0] PixelConfAddrOut,
+  //  input  wire        PixelConfWr5bitIn,       // write configuration = 1'b1, read configuration = 1'b0 => write configuration for trimming DAC only to speedup S-curves
+  //  input  wire        PixelConfWr3bitIn,       // write configuration = 1'b1, read configuration = 1'b0 => write configuration for remaining bits
+  //  output wire        PixelConfWr5bitOut,
+  //  output wire        PixelConfWr3bitOut,
+  //  input  wire  [7:0] PixelConfDataWrIn,       // 8-bit configuration data
+  //  output wire  [7:0] PixelConfDataWrOut,
+  //  input  wire  [7:0] PixelConfDataRdIn,       // 8-bit readback configuration data **WARN: actual values, not latched values !
+  //  output wire  [7:0] PixelConfDataRdOut,
 
 
    /////////////////////////////
@@ -181,8 +171,8 @@ module DigitalCore (
    /////////////////////////
 
    // trigger-independent output data ("prompt" datapath)
-   input  wire [3:0] HitOrIn,           // cluster-based hit-ORs
-   output wire [3:0] HitOrOut,
+  //  input  wire [3:0] HitOrIn,           // cluster-based hit-ORs //  look at these TODO dont need 
+  //  output wire [3:0] HitOrOut,
 
    // BX timestamp/trigger section
    input  wire [`LATENCY_COUNTER_BITS-1:0] LatCntIn,      // BX timestamp
@@ -197,25 +187,25 @@ module DigitalCore (
 
    input  wire [`TRIG_ID_BITS-1:0] TrigIdIn,      // unique ID number associated to L1 trigger
    output wire [`TRIG_ID_BITS-1:0] TrigIdOut,
-   input  wire [`TRIG_ID_BITS-1:0] TrigIdReqIn,   // trigger ID shifted back in time by trigger latency, used to read data or delete if trigger-latency expired
-   output wire [`TRIG_ID_BITS-1:0] TrigIdReqOut,
 
    // pixels <=> periphery handshaking
+  // pin Tok in 0, ReadIn 1 for now... always ready to read
    input  wire TokIn,                  // OR-based token to inform the chip-periphery that there is something to read
    output wire TokOut,
-   input  wire ReadIn,                 // read request issued from chip-periphery
-   output wire ReadOut,
+  //  input  wire ReadIn,                 // read request issued from chip-periphery
+  //  output wire ReadOut,
 
    // triggered output data
-   input  wire [`REGION_ADDRESS_BITS-1:0] RegionAddrIn,       // full address of a pixel-region inside a core-column (from previous core and to next core after internal bus arbitration)
-   output wire [`REGION_ADDRESS_BITS-1:0] RegionAddrOut,
-   input  wire [`REGION_DATA_BITS-1:0]    RegionDataIn,       // triggered pixel-region ToT values (from previous core and to next core after internal bus arbitration)
-   output wire [`REGION_DATA_BITS-1:0]    RegionDataOut,
-
+    output wire [`REGION_DATA_BITS-1:0] RegionDataTrig,
+    output wire [`REGION_DATA_BITS-1:0] RegionDataOut
    // tie-down
-   output wire OutLo   // connected to a tie-down cell, used to initialize hit-ORs, pixel-configuration readback data, token and readout data in the top-most core
+  //  output wire OutLo   // connected to a tie-down cell, used to initialize hit-ORs, pixel-configuration readback data, token and readout data in the top-most core
 
    ) ;
+
+  // TEMP TEMP TEMP TEMP TEMP TEMP
+   logic ReadIn, Readout;
+   assign ReadIn = 1'b1;
 
 
    `ifndef DIGITAL_CORE_ABSTRACT
@@ -260,7 +250,7 @@ module DigitalCore (
 
    // use the 4 MSBs out of the core-row address
    wire [3:0] del_select ;
-   assign del_select[3:0] = CoreRowAddrIn[5:2] ;
+   assign del_select[3:0] = CoreRowAddrIn[5:2];
 
 
    // 40 MHz clock skew compensation
@@ -396,7 +386,6 @@ module DigitalCore (
    //
    //   - Trig
    //   - TrigClear
-   //   - TrigId[`TRIG_ID_BITS-1:0], TrigIdReq[`TRIG_ID_BITS-1:0]
    //   - LatCnt[`LATENCY_COUNTER_BITS-1:0], LatCntReq[`LATENCY_COUNTER_BITS-1:0]
    //
 
@@ -412,20 +401,11 @@ module DigitalCore (
 
 
    // TrigIdIn[`TRIG_ID_BITS-1:0] => TrigIdOut[`TRIG_ID_BITS-1:0]
-   // TrigIdReqIn[`TRIG_ID_BITS-1:0] => TrigIdReqOut[`TRIG_ID_BITS-1:0]
 
    wire [`TRIG_ID_BITS-1:0] local_trig_id ;
    wire [`TRIG_ID_BITS-1:0] local_trig_id_req ;
 
-   generate
-      genvar trig_id_index ;
 
-      for(trig_id_index = 0; trig_id_index < `TRIG_ID_BITS; trig_id_index++) begin : trig_id_fork
-
-         SigFork   trig_id_fork     (.I(TrigIdIn[trig_id_index]), .L(local_trig_id[trig_id_index]), .O(TrigIdOut[trig_id_index])) ;
-         SigFork   trig_id_req_fork (.I(TrigIdReqIn[trig_id_index]), .L(local_trig_id_req[trig_id_index]), .O(TrigIdReqOut[trig_id_index])) ;
-      end
-   endgenerate
 
 
    // LatCntIn[`LATENCY_COUNTER_BITS-1:0] => LatCntOut[`LATENCY_COUNTER_BITS-1:0]
@@ -1057,7 +1037,6 @@ module DigitalCore (
             .Trig             (                                   local_trig ),
             .TrigClear        (                             local_trig_clear ),
             .TrigId           (             local_trig_id[`TRIG_ID_BITS-1:0] ),
-            .TrigIdReq        (         local_trig_id_req[`TRIG_ID_BITS-1:0] ),
 
             // data readout
             .TokIn            (                                   tok_int[r] ),
@@ -1104,10 +1083,7 @@ module DigitalCore (
 `ifdef ATLAS_CHIP
 
    //assign HitOrOut[3:0] = hit_or_int[15][3:0] | HitOrIn[3:0] ;   // combine with hit-ORs from previous core
-   OR2D8LVT hit_or0_lvt ( .A1( hit_or_int[15][0] ), .A2( HitOrIn[0] ), .Z( HitOrOut[0] )) ;
-   OR2D8LVT hit_or1_lvt ( .A1( hit_or_int[15][1] ), .A2( HitOrIn[1] ), .Z( HitOrOut[1] )) ;
-   OR2D8LVT hit_or2_lvt ( .A1( hit_or_int[15][2] ), .A2( HitOrIn[2] ), .Z( HitOrOut[2] )) ;
-   OR2D8LVT hit_or3_lvt ( .A1( hit_or_int[15][3] ), .A2( HitOrIn[3] ), .Z( HitOrOut[3] )) ;
+
 
 
 `elsif CMS_CHIP
@@ -1134,10 +1110,6 @@ module DigitalCore (
    endgenerate
 
 
-   OR2D8LVT hit_or0_lvt ( .A1( hitor_or_seu_any[0] ), .A2( HitOrIn[0] ), .Z( HitOrOut[0] )) ;
-   OR2D8LVT hit_or1_lvt ( .A1( hitor_or_seu_any[1] ), .A2( HitOrIn[1] ), .Z( HitOrOut[1] )) ;
-   OR2D8LVT hit_or2_lvt ( .A1( hitor_or_seu_any[2] ), .A2( HitOrIn[2] ), .Z( HitOrOut[2] )) ;
-   OR2D8LVT hit_or3_lvt ( .A1( hitor_or_seu_any[3] ), .A2( HitOrIn[3] ), .Z( HitOrOut[3] )) ;
    
  `endif
  

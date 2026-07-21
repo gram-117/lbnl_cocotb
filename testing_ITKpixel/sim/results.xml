@@ -1,8 +1,6 @@
 <testsuites name="results">
   <testsuite name="all" package="all">
-    <property name="random_seed" value="1784652859" />
-    <testcase name="network_layer_base_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/net_core_top.py" lineno="335" time="0.0017955303192138672" sim_time_ns="3.8" ratio_time="2116.3663789669367" />
-    <testcase name="multi_inject_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/net_core_top.py" lineno="369" time="0.0005891323089599609" sim_time_ns="3.3999999999999995" ratio_time="5771.19935248887" />
-    <testcase name="local_bypass_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/net_core_top.py" lineno="400" time="0.00037741661071777344" sim_time_ns="3.0" ratio_time="7948.775742261529" />
+    <property name="random_seed" value="1784658835" />
+    <testcase name="pixel_test" classname="pixel_core_test_top" file="/home/grammy/lbnl/cocotb/testing_ITKpixel/tests/pixel_core_test_top.py" lineno="120" time="0.06654882431030273" sim_time_ns="23.0" ratio_time="345.61091406748204" />
   </testsuite>
 </testsuites>

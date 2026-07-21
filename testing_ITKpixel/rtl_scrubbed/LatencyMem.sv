@@ -49,7 +49,6 @@ module LatencyMem (
     input  wire Trig,                                       // L1A trigger
     input  wire TrigClear,                                  // double-trigger support (ATLAS-only)
     input  wire [`TRIG_ID_BITS-1:0] TrigId,                 // Gray-encoded timestamp associated to the received trigger (from chip periphery)
-    input  wire [`TRIG_ID_BITS-1:0] TrigIdReq,              // TrigId shifted back in time by programmable trigger latency (from chip periphery)
  
     // region-data readout
     input  wire TokIn,                                      // token from previous pixel-region
@@ -121,7 +120,6 @@ module LatencyMem (
                 .Trig        (                                 Trig ),
                 .TrigClear   (                            TrigClear ),
                 .TrigId      (            TrigId[`TRIG_ID_BITS-1:0] ),
-                .TrigIdReq   (         TrigIdReq[`TRIG_ID_BITS-1:0] ),
                 .ClkLatMemEn (                    clk_lat_mem_en[k] ),
                 .ReadyToRead (                     ready_to_read[k] ),
                 .Full        (                              full[k] )

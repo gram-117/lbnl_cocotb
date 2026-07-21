@@ -1,6 +1,0 @@
-<testsuites name="results">
-  <testsuite name="all" package="all">
-    <property name="random_seed" value="1781130863" />
-    <testcase name="my_second_test" classname="rca_test" file="/home/grammy/lbnl/cocotb/test2RCA/tests/rca_test.py" lineno="18" time="0.0038728713989257812" sim_time_ns="66.0" ratio_time="17041.619305589757" />
-  </testsuite>
-</testsuites>

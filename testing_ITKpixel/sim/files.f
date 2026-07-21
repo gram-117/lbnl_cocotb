@@ -10,6 +10,3 @@ PixelLogic.sv
 PixelRegionLogic.sv
 LatencyMem.sv
 LatencyMemCell.sv
-NetworkedCore.sv
-RouterStub.sv
-DigitalCoreStub.sv

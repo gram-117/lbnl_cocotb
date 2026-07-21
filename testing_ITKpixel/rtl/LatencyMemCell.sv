@@ -53,7 +53,7 @@ module LatencyMemCell (
     input  wire Trig,                                    // L1A trigger
     input  wire TrigClear,                               // double-trigger support (ATLAS chip)
     input  wire [`TRIG_ID_BITS-1:0] TrigId,              // trigger timestamp
-    input  wire [`TRIG_ID_BITS-1:0] TrigIdReq,           // trigger request timestamp
+    input  wire [`TRIG_ID_BITS-1:0] TrigIdReq,             
  
     // output flags
     output wire ClkLatMemEn,                             // clock-gating enable also sent to shared-logic
@@ -90,6 +90,7 @@ module LatencyMemCell (
 
     // latched bcid == top level request BCID?
     wire counter_last ;
+    // MODIFIED     assign counter_last = (counter[`LATENCY_COUNTER_BITS-1:0] == `[`LATENCY_COUNTER_BITS-1:0] ) & start_state & (!trig_state) ;
     assign counter_last = (counter[`LATENCY_COUNTER_BITS-1:0] == LatCntReq[`LATENCY_COUNTER_BITS-1:0] ) & start_state & (!trig_state) ;
  
  

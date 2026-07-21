@@ -95,9 +95,13 @@ module NetworkedCore (
   // this remains global?
    input  wire TrigIn,
    output wire TrigOut,
+
    // TODO look at trig clear usage
    input  wire TrigClearIn,
    output wire TrigClearOut,
+
+   input wire [`TRIG_ID_BITS-1:0] TrigIdIn,
+   input wire [`TRIG_ID_BITS-1:0] TrigIdOut,
 
     // NETWORKING LAYER SIGNALS
     inout wire [`PACKET_SIZE-1:0] data_bus_up,
@@ -153,6 +157,8 @@ logic [`PACKET_SIZE-1:0] data_bus_r_o;
 logic [`PACKET_SIZE-1:0] RegionDataTrig;
 logic [`PACKET_SIZE-1:0] local_data_packet;
 logic [`PACKET_SIZE-1:0] selected_data_packet;
+
+logic TokIn, TokOut;
 // if token is being occupied by core -> it has data to read
 
 
@@ -228,21 +234,32 @@ DigitalCoreStub DigitalCoreStub (
     .TrigClearIn(TrigClearIn),
     .TrigClearOut(TrigClearOut),
 
+    .TrigIdIn(TrigIdIn),      // unique ID number associated to L1 trigger
+    .TrigIdOut(TrigIdOut),
+
+    .TokIn(TokIn),
+    .TokOut(TokOut),
+
     .RegionDataTrig(RegionDataTrig),
     .RegionDataOut(RegionDataOut)
 );
 
-
+assign TokIn = 1'b0; // keep low, lets core readout whenever
 
 // NETWORK LAYER
 `ifdef NETWORKSIM
-   // Sim: local-core source is driven by the testbench.
-   assign core_mem_valid    = core_mem_valid_tb;
-   assign local_data_packet = local_data_packet_tb;
+   // Sim: local-core source is driven by the testbench. OLD 
+  //  assign core_mem_valid    = core_mem_valid_tb;
+  //  assign local_data_packet = local_data_packet_tb;
+  // use token and actual core logic
+  assign core_mem_valid = TokOut; // 1 if core has data remaining;
+  assign local_data_packet = {CoreRowAddrIn, RegionDataTrig, RegionDataOut};
 `else
    // Synth/normal: local core source not yet wired temp filler
-   assign core_mem_valid    = 1'b0;
-   assign local_data_packet = '0;
+  //  assign core_mem_valid    = 1'b0;
+  //  assign local_data_packet = '0;
+  assign core_mem_valid = TokOut; // 1 if core has data remaining;
+  assign local_data_packet = {CoreRowAddrIn, RegionDataTrig, RegionDataOut};
 `endif
 
 
