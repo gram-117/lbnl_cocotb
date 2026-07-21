@@ -15,6 +15,6 @@ module RouterStub (
 );
 
     // Stub: always route down
-    assign routing_decision = 4'b0100;
+    assign routing_decision = 4'b0010;
 
 endmodule

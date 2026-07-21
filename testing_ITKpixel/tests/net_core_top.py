@@ -14,8 +14,13 @@ CLK_PERIOD = 400  # ps
 PACKET_SIZE = 30
 
 UP = 0
+DOWN = 1
+LEFT = 2
 RIGHT = 3
 
+ROUTE_UP = 0b0001
+ROUTE_DOWN = 0b0010
+ROUTE_LEFT = 0b0100
 ROUTE_RIGHT = 0b1000
 
 # NETWORK_MEM_DEPTH-dependent: a neighbor buf_status that RouterStub reads as
@@ -85,36 +90,65 @@ async def reset_dut(dut) -> None:
     # End on a writable phase, not ReadOnly.
 
 
+# ============================================================
+# Direction plumbing
+# ============================================================
+
 def get_direction_signals(dut, direction: int):
+    """Return (valid_in, data_bus, read_n_bit_mask) for a receive direction."""
     if direction == UP:
-        return dut.valid_up_in, dut.data_bus_up
-    raise ValueError(f"Direction not supported in base test: {direction}")
+        return dut.valid_up_in, dut.data_bus_up, 0b0001
+    if direction == DOWN:
+        return dut.valid_dn_in, dut.data_bus_dn, 0b0010
+    if direction == LEFT:
+        return dut.valid_l_in, dut.data_bus_l, 0b0100
+    if direction == RIGHT:
+        return dut.valid_r_in, dut.data_bus_r, 0b1000
+    raise ValueError(f"Unknown direction: {direction}")
 
 
-async def inject_network_packet(dut, direction: int, packet: int) -> None:
+# ============================================================
+# Multi-packet injection
+# ============================================================
+
+async def inject_network_packets(dut, packets: dict) -> None:
     """
-    Emulate a neighboring core sending one packet.
+    Emulate several neighboring cores sending one packet each, concurrently.
 
-    Timeline:
-        drive valid/data
-        falling edge: transact_n captures ownership
+    Args:
+        packets: mapping of direction (UP/DOWN/LEFT/RIGHT) -> packet int.
+
+    Timeline (shared for all directions):
+        drive valid/data on every requested direction
+        falling edge: transact_n captures ownership on each granted port
         combinational: read_n -> valid_arr -> network_m_Wen
-        rising edge: network_mem captures packet
+        rising edge: network_mem captures the granted packets
     """
-    valid_signal, bus_signal = get_direction_signals(dut, direction)
+    if not packets:
+        raise ValueError("inject_network_packets requires at least one packet")
 
-    packet &= (1 << PACKET_SIZE) - 1
+    mask = (1 << PACKET_SIZE) - 1
 
-    # A persistent external driver is required for an inout wire.
-    bus_signal.value = Force(packet)
-    valid_signal.value = 1
+    # Record what each direction expects so we can check its own grant bit.
+    drivers = {}
+    for direction, packet in packets.items():
+        valid_signal, bus_signal, grant_mask = get_direction_signals(dut, direction)
+        packet &= mask
 
-    # Allow the external bus drive and valid to settle before arbitration.
+        # A persistent external driver is required for an inout wire.
+        bus_signal.value = Force(packet)
+        valid_signal.value = 1
+        drivers[direction] = (valid_signal, bus_signal, grant_mask, packet)
+
+    # Allow the external bus drives and valids to settle before arbitration.
     await Timer(1, unit="ps")
 
     dut._log.info(
-        f"Before negedge: valid_in={valid_signal.value}, "
-        f"bus={bus_signal.value}"
+        "Before negedge: "
+        + ", ".join(
+            f"{_dir_name(d)} valid={v.value} bus={b.value}"
+            for d, (v, b, _, _) in drivers.items()
+        )
     )
 
     # transact_n samples valid_o ^ valid_in here.
@@ -128,20 +162,21 @@ async def inject_network_packet(dut, direction: int, packet: int) -> None:
         f"After negedge: transact_n={dut.transact_n.value}, "
         f"read_n={dut.read_n.value}, "
         f"valid_arr={dut.valid_arr.value}, "
-        f"Wen={dut.network_m_Wen.value}, "
-        f"slot_src[0]={dut.slot_src[0].value}, "
-        f"bus_in={dut.data_bus_up_in.value}"
+        f"Wen={dut.network_m_Wen.value}"
     )
 
-    assert signal_to_int(dut.read_n) & 0b0001, (
-        f"UP receive grant was not asserted: read_n={dut.read_n.value}"
-    )
+    read_n = signal_to_int(dut.read_n)
+    for direction, (_, _, grant_mask, _) in drivers.items():
+        assert read_n & grant_mask, (
+            f"{_dir_name(direction)} receive grant was not asserted: "
+            f"read_n={dut.read_n.value}"
+        )
 
     assert signal_to_int(dut.network_m_Wen) != 0, (
         "No network-memory write enable became active after the negedge"
     )
 
-    # Packet is captured here.
+    # Packets are captured here.
     await RisingEdge(dut.ClkIn)
 
     # RisingEdge returns before all NBA and combinational consequences are
@@ -154,22 +189,48 @@ async def inject_network_packet(dut, direction: int, packet: int) -> None:
         f"mem0={dut.network_mem[0].value}"
     )
 
-    # Release only after the packet has been captured.
-    valid_signal.value = 0
-    bus_signal.value = Release()
+    # Release only after the packets have been captured.
+    for direction, (valid_signal, bus_signal, _, _) in drivers.items():
+        valid_signal.value = 0
+        bus_signal.value = Release()
 
     await Timer(1, unit="ps")
 
 
+async def inject_network_packet(dut, direction: int, packet: int) -> None:
+    """Backwards-compatible single-packet wrapper."""
+    await inject_network_packets(dut, {direction: packet})
+
+
+def _dir_name(direction: int) -> str:
+    return {UP: "UP", DOWN: "DOWN", LEFT: "LEFT", RIGHT: "RIGHT"}.get(
+        direction, str(direction)
+    )
+
+
+# ============================================================
+# Routing (router decides; no Force on routing_decision)
+# ============================================================
+
 def get_output_handles(dut, route: int):
+    if route == ROUTE_UP:
+        return dut.valid_up_o, dut.data_bus_up
+    if route == ROUTE_DOWN:
+        return dut.valid_dn_o, dut.data_bus_dn
+    if route == ROUTE_LEFT:
+        return dut.valid_l_o, dut.data_bus_l
     if route == ROUTE_RIGHT:
         return dut.valid_r_o, dut.data_bus_r
-    raise ValueError(f"Route not supported in base test: 0b{route:04b}")
+    raise ValueError(f"Route not supported: 0b{route:04b}")
 
 
-async def route_one_packet(dut, route: int) -> int:
-    valid_o, output_bus = get_output_handles(dut, route)
+async def route_one_packet(dut, expected_route: int) -> int:
+    """
+    Let the router decide the output direction and observe the transaction.
 
+    routing_decision is NOT forced; we read it back from the DUT and verify it
+    matches expected_route, then watch the corresponding output port.
+    """
     # No neighbors are attempting to transmit into this core.
     dut.valid_up_in.value = 0
     dut.valid_dn_in.value = 0
@@ -179,19 +240,28 @@ async def route_one_packet(dut, route: int) -> int:
     dut.core_mem_valid_tb.value = 0
     dut.local_data_packet_tb.value = 0
 
-    # Select the output direction.
-    dut.routing_decision.value = Force(route)
+    # Let the router's combinational decision settle.
     await Timer(1, unit="ps")
 
-    # valid_r_o is combinational. It should assert immediately because
-    # network_m_cnt is already 1.
+    route = signal_to_int(dut.routing_decision)
+    dut._log.info(
+        f"router chose routing_decision=0b{route:04b} "
+        f"(expected 0b{expected_route:04b})"
+    )
+    assert route == expected_route, (
+        f"Router selected unexpected direction: got 0b{route:04b}, "
+        f"expected 0b{expected_route:04b}"
+    )
+
+    valid_o, output_bus = get_output_handles(dut, route)
+
     dut._log.info(
         f"before transmit negedge: "
         f"free={dut.network_m_free.value} "
         f"count={dut.network_m_cnt.value} "
         f"local_data_valid={dut.local_data_valid.value} "
         f"routing_decision={dut.routing_decision.value} "
-        f"valid_r_o={valid_o.value}"
+        f"valid_o={valid_o.value}"
     )
 
     assert signal_to_int(dut.network_m_cnt) == 1, (
@@ -201,13 +271,12 @@ async def route_one_packet(dut, route: int) -> int:
 
     assert signal_to_int(valid_o) == 1, (
         f"Output valid did not assert before transaction: "
-        f"route={dut.routing_decision.value}, "
+        f"route=0b{route:04b}, "
         f"local_data_valid={dut.local_data_valid.value}, "
         f"count={dut.network_m_cnt.value}"
     )
 
-    # On this falling edge, transact_n[RIGHT] captures:
-    # valid_r_o ^ valid_r_in = 1 ^ 0 = 1.
+    # On this falling edge, transact_n[route] captures valid_o ^ valid_in.
     await FallingEdge(dut.ClkIn)
     await Timer(1, unit="ps")
 
@@ -219,13 +288,13 @@ async def route_one_packet(dut, route: int) -> int:
         f"bus={output_bus.value}"
     )
 
-    assert signal_to_int(dut.transact_n) & ROUTE_RIGHT, (
-        f"RIGHT transaction was not registered: "
+    assert signal_to_int(dut.transact_n) & route, (
+        f"Transaction was not registered for route 0b{route:04b}: "
         f"transact_n={dut.transact_n.value}"
     )
 
-    assert signal_to_int(dut.assert_n) & ROUTE_RIGHT, (
-        f"RIGHT output ownership was not asserted: "
+    assert signal_to_int(dut.assert_n) & route, (
+        f"Output ownership was not asserted for route 0b{route:04b}: "
         f"assert_n={dut.assert_n.value}"
     )
 
@@ -241,11 +310,8 @@ async def route_one_packet(dut, route: int) -> int:
         f"after transmit posedge: "
         f"free={dut.network_m_free.value} "
         f"count={dut.network_m_cnt.value} "
-        f"valid_r_o={valid_o.value}"
+        f"valid_o={valid_o.value}"
     )
-
-    dut.routing_decision.value = Release()
-    await Timer(1, unit="ps")
 
     return packet
 
@@ -276,17 +342,17 @@ async def network_layer_base_test(dut):
         await initialize_inputs(dut)
         await reset_dut(dut)
 
-        packet_up = 0x1234ABCD
+        packet_dn = 0x1234ABCD
 
-        await inject_network_packet(dut, direction=UP, packet=packet_up)
+        await inject_network_packet(dut, direction=DOWN, packet=packet_dn)
 
         occupancy = signal_to_int(dut.buf_status_self)
         assert occupancy == 1, f"Expected occupancy 1, got {occupancy}"
-        dut._log.info(f"Received UP packet 0x{packet_up:x}; occupancy={occupancy}")
+        dut._log.info(f"Received UP packet 0x{packet_dn:x}; occupancy={occupancy}")
 
-        observed = await route_one_packet(dut, route=ROUTE_RIGHT)
-        assert observed == packet_up, (
-            f"Routed packet mismatch: got 0x{observed:x}, expected 0x{packet_up:x}"
+        observed = await route_one_packet(dut, expected_route=ROUTE_DOWN)
+        assert observed == packet_dn, (
+            f"Routed packet mismatch: got 0x{observed:x}, expected 0x{packet_dn:x}"
         )
 
         occupancy = signal_to_int(dut.buf_status_self)
@@ -296,14 +362,44 @@ async def network_layer_base_test(dut):
         await wait_rising_edges(dut, 3)  # let counters stabilize
 
     finally:
-        # Kill background tasks to reduce simulator exit weirdness.
+        if clk_task is not None:
+            clk_task.cancel()
+
+
+@cocotb.test()
+async def multi_inject_test(dut):
+    """Inject packets from several directions at once."""
+
+    clk_task = cocotb.start_soon(generate_clock(dut))
+
+    try:
+        await initialize_inputs(dut)
+        await reset_dut(dut)
+
+        packets = {
+            UP: 0x1234ABCD,
+            DOWN: 0x0BADF00D,
+            LEFT: 0x0DEADBEE,
+        }
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        assert occupancy == len(packets), (
+            f"Expected occupancy {len(packets)}, got {occupancy}"
+        )
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+
+        await wait_rising_edges(dut, 3)  # let counters stabilize
+
+    finally:
         if clk_task is not None:
             clk_task.cancel()
 
 
 @cocotb.test()
 async def local_bypass_test(dut):
-    """Bypass path: network empty, local core presents a packet, route to RIGHT."""
+    """Bypass path: network empty, local core presents a packet, router routes it."""
 
     clk_task = cocotb.start_soon(generate_clock(dut))
 
@@ -316,7 +412,6 @@ async def local_bypass_test(dut):
 
         dut.local_data_packet_tb.value = bypass_packet
         dut.core_mem_valid_tb.value = 1
-        dut.routing_decision.value = Force(ROUTE_RIGHT)
 
         dut.valid_up_in.value = 0
         dut.valid_dn_in.value = 0
@@ -324,29 +419,34 @@ async def local_bypass_test(dut):
         dut.valid_r_in.value = 0
 
         await Timer(1, unit="ps")
+
+        # Router decides; read it back.
+        route = signal_to_int(dut.routing_decision)
+        valid_o, output_bus = get_output_handles(dut, route)
         dut._log.info(
-            f"bypass: valid_r_o={dut.valid_r_o.value} "
+            f"bypass: router chose 0b{route:04b} "
+            f"valid_o={valid_o.value} "
             f"selected={dut.selected_data_packet.value}"
         )
 
         await FallingEdge(dut.ClkIn)
         await Timer(1, unit="ps")
-        observed = signal_to_int(dut.data_bus_r)
+        observed = signal_to_int(output_bus)
 
         assert observed == bypass_packet, (
             f"Bypass mismatch: got 0x{observed:x}, expected 0x{bypass_packet:x}"
         )
-        dut._log.info(f"Local bypass routed 0x{observed:x} to RIGHT")
+        dut._log.info(
+            f"Local bypass routed 0x{observed:x} to 0b{route:04b}"
+        )
 
-        # Clean teardown so nothing is left forced/asserted.
+        # Clean teardown.
         dut.core_mem_valid_tb.value = 0
         dut.local_data_packet_tb.value = 0
-        dut.routing_decision.value = Release()
         await Timer(1, unit="ps")
 
         await wait_rising_edges(dut, 3)  # let counters stabilize
 
     finally:
-        # Kill background tasks to reduce simulator exit weirdness.
         if clk_task is not None:
             clk_task.cancel()
