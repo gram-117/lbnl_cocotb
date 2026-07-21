@@ -40,24 +40,30 @@
 // [Status]         devel
 //-----------------------------------------------------------------------------------------------------
 
+// using different structure, files handled by makefile/cocotb
+// `ifndef DIGITAL_CORE__SV   // include guard
+// `define DIGITAL_CORE__SV
 
-`ifndef DIGITAL_CORE__SV   // include guard
-`define DIGITAL_CORE__SV
+
+// post rtl audit:
+// assign pix_hit_analog = AnaHit;
+// this is the biggest change right now, treats digital injections as hits at core level
+// also quad front or whatever is commented out but should just be for applying bias
 
 
-`include "rtl/common/defines.sv"
+// `include "rtl/common/defines.sv"
 
-`ifndef DIGITAL_CORE_ABSTRACT
-    //
-    // Dependencies:
-    //
-    `include "rtl/models/models.sv"                     // for the "analog-quad" model
-    `include "rtl/core/dba/ProgrammableDelay.v"         // hard-coded delay chain
-    `include "rtl/core/dba/SigFork.sv"                  // hard-coded "signal fork" for time-sensitive core-to-core signals propagation
-    `include "rtl/core/dba/FeControl.sv"
-    `include "rtl/core/dba/PixelRegionLogic.sv"         // 1x4 pixel region with Distributed Buffering Architecture (DBA)
-    `include "rtl/core/dba/RegionAddrEnc.sv"
-`endif
+// `ifndef DIGITAL_CORE_ABSTRACT
+//     //
+//     // Dependencies:
+//     //
+//     `include "rtl/models/models.sv"                     // for the "analog-quad" model
+//     `include "rtl/core/dba/ProgrammableDelay.v"         // hard-coded delay chain
+//     `include "rtl/core/dba/SigFork.sv"                  // hard-coded "signal fork" for time-sensitive core-to-core signals propagation
+//     `include "rtl/core/dba/FeControl.sv"
+//     `include "rtl/core/dba/PixelRegionLogic.sv"         // 1x4 pixel region with Distributed Buffering Architecture (DBA)
+//     `include "rtl/core/dba/RegionAddrEnc.sv"
+// `endif
 
 `timescale 1ns / 1ps
 //`include "timescale.v"
@@ -439,6 +445,9 @@ module DigitalCore (
       end
    endgenerate 
 
+
+// GRAMMY NOTE: ALL OF THE ABOVE HANDLES delay/skew stuff + core-to-core signals
+
 //
 //   .oooooo.   oooo                                                     ooooo                 o8o                         .    o8o                        
 //  d8P'  `Y8b  `888                                                     `888'                 `"'                       .o8    `"'                        
@@ -569,6 +578,10 @@ module DigitalCore (
    assign pixel_conf_data_rd[0][7:0] = 8'b0; //PixelConfDataRdIn[7:0] ;     // from previous core
    //assign PixelConfDataRdOut[7:0] = pixel_conf_data_rd[64][7:0] | PixelConfDataRdIn[7:0] ;   // to next core
 
+   assign pix_hit_analog = AnaHit; // route TB hits through FeControl masking before pix_hit
+   // THIS IS FOR SIM!!!!! TODO THIS SHOULD NOT BE FOR FINAL 
+
+
    //wire [7:0] pixel_conf_data_rd_or;
    //assign pixel_conf_data_rd_or = PixelConfDataRdIn[7:0] | pixel_conf_data_rd[64];
    generate
@@ -655,113 +668,116 @@ module DigitalCore (
             //         quad row. Edge pixels are NOT SUPPORTED for RTL simulations !
             //
 
-`ifdef ATLAS_CHIP
+// GRAMMY NOTES: COMMENTING OUT, FROM MY UNDERSTANDING APPLIES BIAS FOR ANALOG BLOCKS WHICH ISNT NEEDED 
+// FOR COCOTB SIM TODO: return to this when doing real chip stuff
 
-            RD53B_ANALOG_QUAD_DIFF   ANALOG_QUAD (
+// `ifdef ATLAS_CHIP
 
-               // left-pixels bias lines (even index 0,2 ... 6) and right-pixels odd index 1,3 ... 7)
-               .VBP_PREAMP_A_L    (                 VBP_PREAMP_A[quad_col*2+0] ),
-               .VBP_PREAMP_B_L    (                 VBP_PREAMP_B[quad_col*2+0] ),
-               .VBN_COMP_L        (                     VBN_COMP[quad_col*2+0] ),
-               .VBN_PRECOMP_L     (                  VBN_PRECOMP[quad_col*2+0] ),
-               .VTH1_L            (                         VTH1[quad_col*2+0] ),
-               .VTH2_L            (                         VTH2[quad_col*2+0] ),
-               .VBN_LCC_L         (                      VBN_LCC[quad_col*2+0] ),
-               .VBP_VFF_L         (                      VBP_VFF[quad_col*2+0] ),
-               .VCTRL_CF0_L       (                    VCTRL_CF0[quad_col*2+0] ),
-               .VCTRL_LCC_L       (                    VCTRL_LCC[quad_col*2+0] ),
+//             RD53B_ANALOG_QUAD_DIFF   ANALOG_QUAD (
 
-               // right-pixels bias lines (odd index 1,3 ... 7)
-               .VBP_PREAMP_A_R    (                 VBP_PREAMP_A[quad_col*2+1] ),
-               .VBP_PREAMP_B_R    (                 VBP_PREAMP_B[quad_col*2+1] ),
-               .VBN_COMP_R        (                     VBN_COMP[quad_col*2+1] ),
-               .VBN_PRECOMP_R     (                  VBN_PRECOMP[quad_col*2+1] ),
-               .VTH1_R            (                         VTH1[quad_col*2+1] ),
-               .VTH2_R            (                         VTH2[quad_col*2+1] ),
-               .VBN_LCC_R         (                      VBN_LCC[quad_col*2+1] ),
-               .VBP_VFF_R         (                      VBP_VFF[quad_col*2+1] ),
-               .VCTRL_CF0_R       (                    VCTRL_CF0[quad_col*2+1] ),
-               .VCTRL_LCC_R       (                    VCTRL_LCC[quad_col*2+1] ),
+//                // left-pixels bias lines (even index 0,2 ... 6) and right-pixels odd index 1,3 ... 7)
+//                .VBP_PREAMP_A_L    (                 VBP_PREAMP_A[quad_col*2+0] ),
+//                .VBP_PREAMP_B_L    (                 VBP_PREAMP_B[quad_col*2+0] ),
+//                .VBN_COMP_L        (                     VBN_COMP[quad_col*2+0] ),
+//                .VBN_PRECOMP_L     (                  VBN_PRECOMP[quad_col*2+0] ),
+//                .VTH1_L            (                         VTH1[quad_col*2+0] ),
+//                .VTH2_L            (                         VTH2[quad_col*2+0] ),
+//                .VBN_LCC_L         (                      VBN_LCC[quad_col*2+0] ),
+//                .VBP_VFF_L         (                      VBP_VFF[quad_col*2+0] ),
+//                .VCTRL_CF0_L       (                    VCTRL_CF0[quad_col*2+0] ),
+//                .VCTRL_LCC_L       (                    VCTRL_LCC[quad_col*2+0] ),
 
-               // trimming DAC configuration bits
-               .DTH1_UL            ( pix_dth1[quad_row*2+0][quad_col*2+0][3:0] ),
-               .DTH2_UL            ( pix_dth2[quad_row*2+0][quad_col*2+0][3:0] ),
-               .DTH1_UR            ( pix_dth1[quad_row*2+0][quad_col*2+1][3:0] ),
-               .DTH2_UR            ( pix_dth2[quad_row*2+0][quad_col*2+1][3:0] ),
-               .DTH1_LL            ( pix_dth1[quad_row*2+1][quad_col*2+0][3:0] ),
-               .DTH2_LL            ( pix_dth2[quad_row*2+1][quad_col*2+0][3:0] ),
-               .DTH1_LR            ( pix_dth1[quad_row*2+1][quad_col*2+1][3:0] ),
-               .DTH2_LR            ( pix_dth2[quad_row*2+1][quad_col*2+1][3:0] ),
+//                // right-pixels bias lines (odd index 1,3 ... 7)
+//                .VBP_PREAMP_A_R    (                 VBP_PREAMP_A[quad_col*2+1] ),
+//                .VBP_PREAMP_B_R    (                 VBP_PREAMP_B[quad_col*2+1] ),
+//                .VBN_COMP_R        (                     VBN_COMP[quad_col*2+1] ),
+//                .VBN_PRECOMP_R     (                  VBN_PRECOMP[quad_col*2+1] ),
+//                .VTH1_R            (                         VTH1[quad_col*2+1] ),
+//                .VTH2_R            (                         VTH2[quad_col*2+1] ),
+//                .VBN_LCC_R         (                      VBN_LCC[quad_col*2+1] ),
+//                .VBP_VFF_R         (                      VBP_VFF[quad_col*2+1] ),
+//                .VCTRL_CF0_R       (                    VCTRL_CF0[quad_col*2+1] ),
+//                .VCTRL_LCC_R       (                    VCTRL_LCC[quad_col*2+1] ),
 
-`elsif CMS_CHIP
+//                // trimming DAC configuration bits
+//                .DTH1_UL            ( pix_dth1[quad_row*2+0][quad_col*2+0][3:0] ),
+//                .DTH2_UL            ( pix_dth2[quad_row*2+0][quad_col*2+0][3:0] ),
+//                .DTH1_UR            ( pix_dth1[quad_row*2+0][quad_col*2+1][3:0] ),
+//                .DTH2_UR            ( pix_dth2[quad_row*2+0][quad_col*2+1][3:0] ),
+//                .DTH1_LL            ( pix_dth1[quad_row*2+1][quad_col*2+0][3:0] ),
+//                .DTH2_LL            ( pix_dth2[quad_row*2+1][quad_col*2+0][3:0] ),
+//                .DTH1_LR            ( pix_dth1[quad_row*2+1][quad_col*2+1][3:0] ),
+//                .DTH2_LR            ( pix_dth2[quad_row*2+1][quad_col*2+1][3:0] ),
 
-            RD53B_ANALOG_QUAD_LIN   ANALOG_QUAD (
+// `elsif CMS_CHIP
 
-               // left-pixels bias lines (even index 0,2 ... 6)
-               .IPA_A_L            (                       IPA_A[quad_col*2+0] ),
-               .IPA_B_L            (                       IPA_B[quad_col*2+0] ),
-               .ICOMP_L            (                       ICOMP[quad_col*2+0] ),
-               .ICOMP_STAR_L       (                  ICOMP_STAR[quad_col*2+0] ),
-               .VTH_L              (                         VTH[quad_col*2+0] ),
-               .VREF_KRUM_L        (                   VREF_KRUM[quad_col*2+0] ),
-               .IHU_KRUM_L         (                    IHU_KRUM[quad_col*2+0] ),
-               .IHD_KRUM_L         (                    IHD_KRUM[quad_col*2+0] ),
-               .IFC_L              (                         IFC[quad_col*2+0] ),
-               .ILDAC_MIR_L        (                   ILDAC_MIR[quad_col*2+0] ),
+//             RD53B_ANALOG_QUAD_LIN   ANALOG_QUAD (
 
-               // right-pixels bias lines (odd index 1,3 ... 7)
-               .IPA_A_R            (                       IPA_A[quad_col*2+1] ),
-               .IPA_B_R            (                       IPA_B[quad_col*2+1] ),
-               .ICOMP_R            (                       ICOMP[quad_col*2+1] ),
-               .ICOMP_STAR_R       (                  ICOMP_STAR[quad_col*2+1] ),
-               .VTH_R              (                         VTH[quad_col*2+1] ),
-               .VREF_KRUM_R        (                   VREF_KRUM[quad_col*2+1] ),
-               .IHU_KRUM_R         (                    IHU_KRUM[quad_col*2+1] ),
-               .IHD_KRUM_R         (                    IHD_KRUM[quad_col*2+1] ),
-               .IFC_R              (                         IFC[quad_col*2+1] ),
-               .ILDAC_MIR_R        (                   ILDAC_MIR[quad_col*2+1] ),
+//                // left-pixels bias lines (even index 0,2 ... 6)
+//                .IPA_A_L            (                       IPA_A[quad_col*2+0] ),
+//                .IPA_B_L            (                       IPA_B[quad_col*2+0] ),
+//                .ICOMP_L            (                       ICOMP[quad_col*2+0] ),
+//                .ICOMP_STAR_L       (                  ICOMP_STAR[quad_col*2+0] ),
+//                .VTH_L              (                         VTH[quad_col*2+0] ),
+//                .VREF_KRUM_L        (                   VREF_KRUM[quad_col*2+0] ),
+//                .IHU_KRUM_L         (                    IHU_KRUM[quad_col*2+0] ),
+//                .IHD_KRUM_L         (                    IHD_KRUM[quad_col*2+0] ),
+//                .IFC_L              (                         IFC[quad_col*2+0] ),
+//                .ILDAC_MIR_L        (                   ILDAC_MIR[quad_col*2+0] ),
 
-               // trimming DAC configuration bits
-               .TH_DAC_UL          ( pix_tdac[quad_row*2+0][quad_col*2+0][4:0] ),
-               .TH_DAC_UR          ( pix_tdac[quad_row*2+0][quad_col*2+1][4:0] ),
-               .TH_DAC_LL          ( pix_tdac[quad_row*2+1][quad_col*2+0][4:0] ),
-               .TH_DAC_LR          ( pix_tdac[quad_row*2+1][quad_col*2+1][4:0] ),
+//                // right-pixels bias lines (odd index 1,3 ... 7)
+//                .IPA_A_R            (                       IPA_A[quad_col*2+1] ),
+//                .IPA_B_R            (                       IPA_B[quad_col*2+1] ),
+//                .ICOMP_R            (                       ICOMP[quad_col*2+1] ),
+//                .ICOMP_STAR_R       (                  ICOMP_STAR[quad_col*2+1] ),
+//                .VTH_R              (                         VTH[quad_col*2+1] ),
+//                .VREF_KRUM_R        (                   VREF_KRUM[quad_col*2+1] ),
+//                .IHU_KRUM_R         (                    IHU_KRUM[quad_col*2+1] ),
+//                .IHD_KRUM_R         (                    IHD_KRUM[quad_col*2+1] ),
+//                .IFC_R              (                         IFC[quad_col*2+1] ),
+//                .ILDAC_MIR_R        (                   ILDAC_MIR[quad_col*2+1] ),
 
-`endif
+//                // trimming DAC configuration bits
+//                .TH_DAC_UL          ( pix_tdac[quad_row*2+0][quad_col*2+0][4:0] ),
+//                .TH_DAC_UR          ( pix_tdac[quad_row*2+0][quad_col*2+1][4:0] ),
+//                .TH_DAC_LL          ( pix_tdac[quad_row*2+1][quad_col*2+0][4:0] ),
+//                .TH_DAC_LR          ( pix_tdac[quad_row*2+1][quad_col*2+1][4:0] ),
 
-               /////////////////////////
-               //   COMMON AFE pins   //
-               /////////////////////////
+// `endif
 
-               // calibration circuit DC levels and charge-injection signals
-               .VCAL_MI_L         (                      VCAL_MI[quad_col*2+0] ),
-               .VCAL_HI_L         (                      VCAL_HI[quad_col*2+0] ),
-               .VCAL_MI_R         (                      VCAL_MI[quad_col*2+1] ),
-               .VCAL_HI_R         (                      VCAL_HI[quad_col*2+1] ),
+//                /////////////////////////
+//                //   COMMON AFE pins   //
+//                /////////////////////////
 
-               .S0_UL             (         pix_s0[quad_row*2+0][quad_col*2+0] ),
-               .S0_UR             (         pix_s0[quad_row*2+0][quad_col*2+1] ),
-               .S0_LL             (         pix_s0[quad_row*2+1][quad_col*2+0] ),
-               .S0_LR             (         pix_s0[quad_row*2+1][quad_col*2+1] ),
+//                // calibration circuit DC levels and charge-injection signals
+//                .VCAL_MI_L         (                      VCAL_MI[quad_col*2+0] ),
+//                .VCAL_HI_L         (                      VCAL_HI[quad_col*2+0] ),
+//                .VCAL_MI_R         (                      VCAL_MI[quad_col*2+1] ),
+//                .VCAL_HI_R         (                      VCAL_HI[quad_col*2+1] ),
 
-               .S1_UL             (         pix_s1[quad_row*2+0][quad_col*2+0] ),
-               .S1_UR             (         pix_s1[quad_row*2+0][quad_col*2+1] ),
-               .S1_LL             (         pix_s1[quad_row*2+1][quad_col*2+0] ),
-               .S1_LR             (         pix_s1[quad_row*2+1][quad_col*2+1] ),
+//                .S0_UL             (         pix_s0[quad_row*2+0][quad_col*2+0] ),
+//                .S0_UR             (         pix_s0[quad_row*2+0][quad_col*2+1] ),
+//                .S0_LL             (         pix_s0[quad_row*2+1][quad_col*2+0] ),
+//                .S0_LR             (         pix_s0[quad_row*2+1][quad_col*2+1] ),
 
-               // bump pads
-               .BUMP_UL           (    ana_hit_int[quad_row*2+0][quad_col*2+0] ),
-               .BUMP_UR           (    ana_hit_int[quad_row*2+0][quad_col*2+1] ),
-               .BUMP_LL           (    ana_hit_int[quad_row*2+1][quad_col*2+0] ),
-               .BUMP_LR           (    ana_hit_int[quad_row*2+1][quad_col*2+1] ),
+//                .S1_UL             (         pix_s1[quad_row*2+0][quad_col*2+0] ),
+//                .S1_UR             (         pix_s1[quad_row*2+0][quad_col*2+1] ),
+//                .S1_LL             (         pix_s1[quad_row*2+1][quad_col*2+0] ),
+//                .S1_LR             (         pix_s1[quad_row*2+1][quad_col*2+1] ),
 
-               // DISC outputs
-               .DISC_OUT_UL       ( pix_hit_analog[quad_row*2+0][quad_col*2+0] ),
-               .DISC_OUT_UR       ( pix_hit_analog[quad_row*2+0][quad_col*2+1] ),
-               .DISC_OUT_LL       ( pix_hit_analog[quad_row*2+1][quad_col*2+0] ),
-               .DISC_OUT_LR       ( pix_hit_analog[quad_row*2+1][quad_col*2+1] )
+//                // bump pads
+//                .BUMP_UL           (    ana_hit_int[quad_row*2+0][quad_col*2+0] ),
+//                .BUMP_UR           (    ana_hit_int[quad_row*2+0][quad_col*2+1] ),
+//                .BUMP_LL           (    ana_hit_int[quad_row*2+1][quad_col*2+0] ),
+//                .BUMP_LR           (    ana_hit_int[quad_row*2+1][quad_col*2+1] ),
 
-            ) ;
+//                // DISC outputs
+//                .DISC_OUT_UL       ( pix_hit_analog[quad_row*2+0][quad_col*2+0] ),
+//                .DISC_OUT_UR       ( pix_hit_analog[quad_row*2+0][quad_col*2+1] ),
+//                .DISC_OUT_LL       ( pix_hit_analog[quad_row*2+1][quad_col*2+0] ),
+//                .DISC_OUT_LR       ( pix_hit_analog[quad_row*2+1][quad_col*2+1] )
+
+//             ) ;
 
 //
 // oooooooooooo oooooooooooo        .oooooo.                             .                      oooo  
@@ -986,7 +1002,7 @@ module DigitalCore (
     
    // ... then enable readout for this core if at least one region asserted the token...
    wire this_core_read ;
-   assign this_core_read = (TokIn == 1'b0 && TokOut == 1'b1) ? 1'b1 : 1'b0 ;
+   assign this_core_read = (TokIn == 1'b0 && TokOut == 1'b1) ? 1'b1 : 1'b0 ; 
 
    wire read_region ;
    assign read_region = this_core_read & local_read ;
@@ -1014,7 +1030,7 @@ module DigitalCore (
    generate
 
       genvar r ;  // r = 0,1, .. 15
-
+      // maybe move to 1 for temp purposes, need to be able to do testing
       for(r = 0; r < 16; r++) begin: PixelRegion
 
          PixelRegionLogic   PixelRegionLogic (
@@ -1056,7 +1072,7 @@ module DigitalCore (
 
 
 
-
+  
    ////////////////////////////
    //   hit-ORs generation   //
    ////////////////////////////
@@ -1222,7 +1238,7 @@ module DigitalCore (
 
 endmodule : DigitalCore
 
-`endif   // DIGITAL_CORE__SV
+// `endif   // DIGITAL_CORE__SV
 
 
 //
