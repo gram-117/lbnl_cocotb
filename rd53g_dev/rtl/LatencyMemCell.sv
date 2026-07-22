@@ -158,14 +158,10 @@ module LatencyMemCell (
     //   trigger matchig   //
     /////////////////////////
  
-    // compare trigger timestamp (shifted back in time by trigger-latency) with timestamp stored in memory
-    wire trig_id_match;
-    assign trig_id_match = 1'b1; // no more trigger req matching TODO simplify later
- 
     // trigger matched before trigger latency elapses, it's time to get ToT data from per-pixel ToT memories !
-    assign req_to_read = start_state & trig_state & trig_id_match & !TrigClear;
+    assign req_to_read = start_state & trig_state & !TrigClear;
  
-    assign cleared = trig_state & trig_id_match & TrigClear ;
+    assign cleared = trig_state & TrigClear ;
  
     // trigger matched ! it's time to get ToT data from per-pixel TOT memories 
     assign ReadyToRead = trig_state & !start_state ; 

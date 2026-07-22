@@ -132,7 +132,7 @@ async def inject_network_packets(dut, packets: dict) -> None:
         packet &= mask
 
         # A persistent external driver is required for an inout wire.
-        bus_signal.value = Force(packet)
+        # bus_signal.value = Force(packet)
         valid_signal.value = 1
         drivers[direction] = (valid_signal, bus_signal, grant_mask, packet)
 
@@ -162,15 +162,31 @@ async def inject_network_packets(dut, packets: dict) -> None:
     )
 
     read_n = signal_to_int(dut.read_n)
-    for direction, (_, _, grant_mask, _) in drivers.items():
-        assert read_n & grant_mask, (
-            f"{_dir_name(direction)} receive grant was not asserted: "
-            f"read_n={dut.read_n.value}"
-        )
+    for direction, (valid_signal, bus_signal, grant_mask, packet) in drivers.items():
+        transact_cancel = False
+        if direction == UP:
+            transact_cancel = dut.valid_up_o.value != 0 
+        elif (direction == DOWN):
+            transact_cancel = dut.valid_dn_o.value != 0 
+        elif direction == LEFT:
+            transact_cancel = dut.valid_l_o.value != 0 
+        elif direction == RIGHT:
+            transact_cancel = dut.valid_r_o.value != 0 
+            # cancel case of both have valid that is okay :)
+        if (not transact_cancel):
+            # once valid transction then assert data on bus
+            bus_signal.value = Force(packet)
 
-    assert signal_to_int(dut.network_m_Wen) != 0, (
-        "No network-memory write enable became active after the negedge"
+            assert read_n & grant_mask, (
+                f"{_dir_name(direction)} receive grant was not asserted: "
+                f"read_n={dut.read_n.value}"
+            )
+            assert signal_to_int(dut.network_m_Wen) != 0, (
+              "No network-memory write enable became active after the negedge"
     )
+
+        else:
+            dut._log.info(f"transaction cancled for {_dir_name(direction)}")
 
     # Packets are captured here.
     await RisingEdge(dut.ClkIn)
@@ -441,11 +457,11 @@ async def local_mem_test(dut):
         await initialize_inputs(dut)
         await reset_dut(dut)
 
-        mask = (1 << 16) - 1
+        mask = (1 << 32) - 1
 
         await inject_local_mem(dut, mask)
 
-        for i in range(7):
+        for i in range(11):
           await wait_rising_edges(dut, 1)
           dut._log.info(f"TokOut {dut.TokOut.value}, localpacket {dut.local_data_packet.value}")
 
@@ -465,13 +481,7 @@ async def local_bypass_test(dut):
         await reset_dut(dut)
 
         mask = (1 << 16) - 1
-        await inject_local_mem(dut, 31)
-
-
-        dut.valid_up_in.value = 0
-        dut.valid_dn_in.value = 0
-        dut.valid_l_in.value = 0
-        dut.valid_r_in.value = 0
+        await inject_local_mem(dut, mask)
 
         await Timer(1, unit="ps")
         await RisingEdge(dut.ClkIn)
@@ -502,7 +512,127 @@ async def local_bypass_test(dut):
         # dut.local_data_packet_tb.value = 0
         # await Timer(1, unit="ps")
 
-        await wait_rising_edges(dut, 4)  # let counters stabilize
+        await wait_rising_edges(dut, 11)  # let counters stabilize
+
+    finally:
+        if clk_task is not None:
+            clk_task.cancel()
+
+
+
+@cocotb.test()
+async def overflow_test(dut):
+    """Inject packets to observe steady state and overflow behavior"""
+    ## TEST CASE PASSED!!! INJECT 3x3 READS OUT 7, buffer status overflows by 2 not 3 ->
+    # steady state achieved
+
+    clk_task = cocotb.start_soon(generate_clock(dut))
+
+    try:
+        await initialize_inputs(dut)
+        await reset_dut(dut)
+
+        packets = {
+            UP: 0x11111111,
+            RIGHT: 0x22222222,
+            LEFT: 0x33333333,
+        }
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        # assert occupancy == len(packets), (
+        #     f"Expected occupancy {len(packets)}, got {occupancy}"
+        # )
+
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+        packets = {
+            UP: 0x44444444,
+            RIGHT: 0x55555555,
+            LEFT: 0x66666666,
+        }
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        # assert occupancy == len(packets), (
+        #     f"Expected occupancy {len(packets)}, got {occupancy}"
+        # )
+
+        packets = {
+            UP: 0x77777777,
+            RIGHT: 0x88888888,
+            LEFT: 0x99999999,
+        }
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        # assert occupancy == len(packets), (
+        #     f"Expected occupancy {len(packets)}, got {occupancy}"
+        # )
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+
+        await wait_rising_edges(dut, 12)  # let counters stabilize
+
+    finally:
+        if clk_task is not None:
+            clk_task.cancel()
+
+## maybe one more test case with the routing getting cancled and then read out next cycle?
+## need to move to golden model soon instead of manually doing asserts and shit.......
+
+
+@cocotb.test()
+async def conflict_test(dut):
+    """test the conflict behavior case"""
+
+    clk_task = cocotb.start_soon(generate_clock(dut))
+
+    try:
+        await initialize_inputs(dut)
+        await reset_dut(dut)
+
+        packets = {
+            UP: 0x11111111,
+            RIGHT: 0x22222222,
+            LEFT: 0x33333333,
+        }
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        # assert occupancy == len(packets), (
+        #     f"Expected occupancy {len(packets)}, got {occupancy}"
+        # )
+
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+        packets = {
+            DOWN: 0x44444444,
+        }
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        # assert occupancy == len(packets), (
+        #     f"Expected occupancy {len(packets)}, got {occupancy}"
+        # )
+
+        packets = {
+            DOWN: 0x55555555,
+        }
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+
+        await inject_network_packets(dut, packets)
+
+        occupancy = signal_to_int(dut.buf_status_self)
+        # assert occupancy == len(packets), (
+        #     f"Expected occupancy {len(packets)}, got {occupancy}"
+        # )
+        dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
+
+        await wait_rising_edges(dut, 12)  # let counters stabilize
 
     finally:
         if clk_task is not None:

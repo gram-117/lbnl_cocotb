@@ -229,7 +229,7 @@ module DigitalCore (
 
 
 
-    //  input  wire AnaInjectionModeIn,  // uniform/alternating charge-injection mode selection
+  //  input  wire AnaInjectionModeIn,  // uniform/alternating charge-injection mode selection
   //  output wire AnaInjectionModeOut,
   //  input  wire EnDigHitIn,          // digital injection = 1'b1, analog injection = 1'b0
   localparam logic EnDigHitIn = 1'b1;

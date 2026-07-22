@@ -23,9 +23,11 @@
 /*
 TODO: 
 FIGURE OUT CONFIG STUFF
+FIGURE OUT DISABLING/FAULT TOLERANCE
 
 ADD STEADY STATE 1 CYCLE HIT (clock in and out of same register)
 need to do this by chooiing to write into the slot that is selected by the rptr
+^ done need to be verified!!!!!
 
 
 */
@@ -120,9 +122,28 @@ module NetworkedCore (
     input logic valid_up_in,
     input logic valid_dn_in,
     input logic valid_l_in,
-    input logic valid_r_in
+    input logic valid_r_in,
 
+// for simulation icarus doesnt like packed arr
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_0,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_1,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_2,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_3,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_4,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_5,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_6,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_7
 );
+
+assign network_mem_tb_0 = network_mem[0];
+assign network_mem_tb_1 = network_mem[1];
+assign network_mem_tb_2 = network_mem[2];
+assign network_mem_tb_3 = network_mem[3];
+assign network_mem_tb_4 = network_mem[4];
+assign network_mem_tb_5 = network_mem[5];
+assign network_mem_tb_6 = network_mem[6];
+assign network_mem_tb_7 = network_mem[7];
+
 
 
 // gated clock for network memory, high on valids 
@@ -316,9 +337,6 @@ assign buf_status_self = network_m_cnt;
 
 // READ LOGIC : rptr + occupancy count
 always_comb begin
-  selected_data_packet = local_data_packet; // default to empty-network case
-  network_rptr         = '0;
-
   selected_data_packet = local_data_packet; // default to empty-network case
   network_rptr         = '0;
   found                = 1'b0;

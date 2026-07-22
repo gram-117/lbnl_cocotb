@@ -11,7 +11,7 @@
 // [Reset]          - Reset_b:   Synchronous active low
 //
 // [Description]    Common per pixel-region timestamp memory and trigger-matching/arbitration logic.
-//                  ATLAS double-trigger supported.
+//                  ATLAS double-trigger supported. TODO
 // [Notes]          -
 // [Status]         devel
 //-----------------------------------------------------------------------------------------------------
@@ -166,7 +166,7 @@ module LatencyMem (
     // read-pointer to get ToT values from selected ToT memory slot
     assign TotMemReadAddr[`LATENCY_MEM_DEPTH-1:0] = (DataToCoreEn == 1'b1) ? ready_to_read[`LATENCY_MEM_DEPTH-1:0] : {`LATENCY_MEM_DEPTH{1'b0}} ;
 
-    // assign RegionTrigOut = TrigIdArrOut[TotMemReadAddr]; // get the associated trigger for selected memory // TrigIdOut TODO NAMING 
+    // get current trigid
     logic [`TRIG_ID_BITS-1:0] RegionTrigOut_comb;
     always_comb begin
         RegionTrigOut_comb = '0;
