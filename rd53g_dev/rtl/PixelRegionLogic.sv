@@ -25,7 +25,12 @@
 // [Notes]          - 
 // [Status]         devel
 //-----------------------------------------------------------------------------------------------------
-
+/* GRAMMY MODIFICATIONS:
+removed trigidreq
+added region trig out for packet generation
+removed 6to4 mapping and 80mhz
+removed CMS stuff
+*/
 
 `ifndef PIXEL_REGION_LOGIC__SV   // include guard
 `define PIXEL_REGION_LOGIC__SV
@@ -49,14 +54,6 @@ module PixelRegionLogic (
    input  wire Clk,
    input  wire Reset_b,
 
-   // global configuration
-   input  wire TotDualEdgeCount,                         // enable/disable ToT counting at 80 MHz using dual-edge
-   input  wire Tot6to4Mapping,                           // enable/disable 6b/4b ToT encoding with dual-slope mapping
-
-`ifdef CMS_CHIP
-   input  wire HitSampleMode,                            // choose hit sampling mode between edge sensitive (1) and level sensitive (0)
-`endif
-
    // Hit from analog FE or digital injection gets fanned out to individual PixelLogic
    input  wire [3:0] Hit,                                // hit pulses from pixels, any  firing pixel will start the common latency counter
    input  wire [3:0] PwrDwn,                             // if all front-ends in the pixel-region are turned off, turn off also the shared memory and tie-down output data
@@ -66,14 +63,14 @@ module PixelRegionLogic (
    input  wire [`LATENCY_COUNTER_BITS-1:0] LatCntReq,    // BX timestamp shifted by programmable trigger latency (from chip periphery)
    input  wire Trig,                                     // L1A trigger
    input  wire TrigClear,                                // double-trigger support (ATLAS-only)
-   input  wire [`TRIG_ID_BITS-1:0] TrigId,               // BX timestamp associated to the received trigger (from chip periphery)
+   input  wire [`TRIG_ID_BITS-1:0] TrigIdIn,               // BX timestamp associated to the received trigger (from chip periphery)
 
    // data readout
    input  wire TokIn,                                    // token from previous pixel-region
    output wire TokOut,                                   // token to next pixel-region
    input  wire Read,                                     // read request from chip periphery
-   output wire [15:0] DataToCore                         // triggered ToT values from pixels
-
+   output wire [`REGION_DATA_BITS-1:0] DataToCore,                         // triggered ToT values from pixels
+   output wire [`TRIG_ID_BITS-1:0] RegionTrigOut
    ) ;
 // latency config 
 
@@ -161,7 +158,9 @@ module PixelRegionLogic (
    wire pwr_dwn_all ;
    assign pwr_dwn_all = &PwrDwn[3:0] ;
 
-   wire data_to_core_en ;   // data-output enable from common latency memory
+   wire data_to_core_en;   // data-output enable from common latency memory
+   wire [`TRIG_ID_BITS-1:0] trig_id_out;
+   assign RegionTrigOut = (data_to_core_en == 1'b1) ? trig_id_out : '0;
 
    LatencyMem   LatencyMem (
 
@@ -178,7 +177,7 @@ module PixelRegionLogic (
       .LatCntReq       (       LatCntReq[`LATENCY_COUNTER_BITS-1:0] ),
       .Trig            (                                       Trig ),
       .TrigClear       (                                  TrigClear ),
-      .TrigId          (                  TrigId[`TRIG_ID_BITS-1:0] ),
+      .TrigId          (                  TrigIdIn[`TRIG_ID_BITS-1:0] ),
 
       // region-data readout
       .TokIn           (                                      TokIn ),
@@ -186,9 +185,9 @@ module PixelRegionLogic (
       .Read            (                                       Read ), 
       .TotMemWriteAddr ( tot_mem_write_addr[`LATENCY_MEM_DEPTH-1:0] ),
       .TotMemReadAddr  (  tot_mem_read_addr[`LATENCY_MEM_DEPTH-1:0] ),
-      .DataToCoreEn    (                            data_to_core_en )
-
-      ) ;
+      .DataToCoreEn    (                            data_to_core_en ),
+      .RegionTrigOut       (                                trig_id_out)
+      );
 
 
 
@@ -197,8 +196,8 @@ module PixelRegionLogic (
    /////////////////////////
 
    // re-pack ToT values and send them to the core for readout
-   wire [15:0] region_data ;
-   assign region_data = {pixel_data[3][3:0], pixel_data[2][3:0], pixel_data[1][3:0], pixel_data[0][3:0]} ;
+   wire [`REGION_DATA_BITS-1:0] region_data;
+   assign region_data = {pixel_data[3][3:0], pixel_data[2][3:0], pixel_data[1][3:0], pixel_data[0][3:0]};
 
    //wire en_out ;
    //assign en_out = en_out_pre & ~pwr_dwn_all ;   // **WARN: pwr_dwn_all check now moved into LatencyMem

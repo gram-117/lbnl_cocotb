@@ -53,6 +53,8 @@ module LatencyMemCell (
     input  wire Trig,                                    // L1A trigger
     input  wire TrigClear,                               // double-trigger support (ATLAS chip)
     input  wire [`TRIG_ID_BITS-1:0] TrigId,              // trigger timestamp
+
+    output wire [`TRIG_ID_BITS-1:0] TrigIdOut,
  
     // output flags
     output wire ClkLatMemEn,                             // clock-gating enable also sent to shared-logic
@@ -107,7 +109,7 @@ module LatencyMemCell (
     end   // always_ff
  
  
- 
+    assign TrigIdOut = counter[`TRIG_ID_BITS-1:0]; // expose to high level
  
     ///////////////////////////////////////////
     //   timestamp memory controller (FSM)   //
@@ -157,8 +159,8 @@ module LatencyMemCell (
     /////////////////////////
  
     // compare trigger timestamp (shifted back in time by trigger-latency) with timestamp stored in memory
-    wire trig_id_match ;
-    assign trig_id_match = (counter[`TRIG_ID_BITS-1:0] == TrigIdReq[`TRIG_ID_BITS-1:0] ) ? 1'b1 : 1'b0 ;
+    wire trig_id_match;
+    assign trig_id_match = 1'b1; // no more trigger req matching TODO simplify later
  
     // trigger matched before trigger latency elapses, it's time to get ToT data from per-pixel ToT memories !
     assign req_to_read = start_state & trig_state & trig_id_match & !TrigClear;

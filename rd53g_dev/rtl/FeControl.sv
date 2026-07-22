@@ -32,6 +32,7 @@
 // RTL AUDIT:
    // assign PwrDwn = ~conf_hit_en ;   // if hit is disabled (i.e. the pixel is "masked"), the pixel logic is turned off
   //  assign PwrDwn = 1'b0;   // if hit is disabled (i.e. the pixel is "masked"), the pixel logic is turned off TODO: fix
+  // this module does configuring and stuff but for now it just acts as a passthrough for FeHit which is drive by testbench!!!!
   // shortcut taken here revisit closer to tapeout!!!!!!
 
 
@@ -60,16 +61,17 @@
 
 module FeControl (
 
-   // configuration section
-   input  wire       PixelConfDefault,   // MUX control to switch between default configuration and external configuration
-   input  wire       PixelConfWr5bit,    // write = 1'b1 / read = 1'b0 => write/read configuration for trimming DAC only to speedup S-curves
-   input  wire       PixelConfWr3bit,    // write = 1'b1 / read = 1'b0 => write/read configuration for remaining bits
-   input  wire [7:0] PixelConfDataWr,    // new external configuration data
-   output wire [7:0] PixelConfDataRd,    // readback configuration data
-   output wire PwrDwn,                   // **NOTE: also fed to pixel-region logic for clock-gating !
-`ifdef CMS_CHIP
-   input  wire EnSeuCount,               // configuration bit to enable routing of SeuAny to HitOr
-`endif
+//    // configuration section
+//    input  wire       PixelConfDefault,   // MUX control to switch between default configuration and external configuration
+//    input  wire       PixelConfWr5bit,    // write = 1'b1 / read = 1'b0 => write/read configuration for trimming DAC only to speedup S-curves
+//    input  wire       PixelConfWr3bit,    // write = 1'b1 / read = 1'b0 => write/read configuration for remaining bits
+//    input  wire [7:0] PixelConfDataWr,    // new external configuration data
+//    output wire [7:0] PixelConfDataRd,    // readback configuration data
+//    output wire PwrDwn,                   // **NOTE: also fed to pixel-region logic for clock-gating !
+// `ifdef CMS_CHIP
+//    input  wire EnSeuCount,               // configuration bit to enable routing of SeuAny to HitOr
+// `endif
+
    // calibration section
    input  wire DefaultCalEn,      // by default the first two pixel rows in each core are ready for charge-injection without the need to enable calibration
    input  wire EvenOddS0,         // injection takes place for enabled pixels when either S0 or S1 switch from low to high (proper swapping between even/odd pixels based on pixel position in each quad is performed in the core)
@@ -78,12 +80,9 @@ module FeControl (
    output wire FeS1,
 
    // configuration bits to the trimming DAC (4+4 bits ATLAS, 5-bits CMS)
-`ifdef ATLAS_CHIP
    output wire [3:0] FeDTH1,
    output wire [3:0] FeDTH2,
-`elsif CMS_CHIP
-   output wire [4:0] FeThDac,
-`endif
+
 
    // hit pulse from analog front-end
    input wire FeHit,
@@ -106,6 +105,21 @@ module FeControl (
 
    wire [7:0] conf_latches ;
 
+
+   // TEMP TODO GET RID OF THIS temp signals so i dont have to go through this procrastenating!!!!!!
+   // config stuff is up in the air so.....
+   logic       PixelConfDefault;   // MUX control to switch between default configuration and external configuration
+   logic       PixelConfWr5bit;    // write = 1'b1 / read = 1'b0 => write/read configuration for trimming DAC only to speedup S-curves
+   logic       PixelConfWr3bit;    // write = 1'b1 / read = 1'b0 => write/read configuration for remaining bits
+   logic [7:0] PixelConfDataWr;    // new external configuration data
+
+   assign PixelConfDefault = '0;  // MUX control to switch between default configuration and external configuration
+   assign PixelConfWr5bit = '0;    // write = 1'b1 / read = 1'b0 => write/read configuration for trimming DAC only to speedup S-curves
+   assign PixelConfWr3bit = '0;    // write = 1'b1 / read = 1'b0 => write/read configuration for remaining bits
+   assign PixelConfDataWr = '0;    // new external configuration data
+   
+   logic PwrDwn;
+
    //
    // Configuration bits assignment:
    //
@@ -125,8 +139,6 @@ module FeControl (
    // See also https://gitlab.cern.ch/rd53/RD53B/issues/128
    //
 
-   `ifdef ATLAS_CHIP   //_____________________________________
-
       LHQD1_TMR  conf_latch_0 (.D(PixelConfDataWr[0]), .E(PixelConfWr3bit), .Q(conf_latches[0]), .Q0(), .Q1(), .Q2()) ;   // hit_en
       LHQD1      conf_latch_1 (.D(PixelConfDataWr[1]), .E(PixelConfWr3bit), .Q(conf_latches[1])) ;                        // cal_en              **NO TMR**
       LHQD1      conf_latch_2 (.D(PixelConfDataWr[2]), .E(PixelConfWr3bit), .Q(conf_latches[2])) ;                        // hitOr_en            **NO TMR**
@@ -135,31 +147,6 @@ module FeControl (
       LHQD1_TMR  conf_latch_5 (.D(PixelConfDataWr[5]), .E(PixelConfWr5bit), .Q(conf_latches[5]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[2]
       LHQD1_TMR  conf_latch_6 (.D(PixelConfDataWr[6]), .E(PixelConfWr5bit), .Q(conf_latches[6]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[3]
       LHQD1_TMR  conf_latch_7 (.D(PixelConfDataWr[7]), .E(PixelConfWr5bit), .Q(conf_latches[7]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[4] = tdac_sign for DIFF front-end
-
-   `elsif CMS_CHIP   //_____________________________________
-
-      wire [3:0] q0, q1, q2 ;
-
-      wire [3:0] upset ; // **NOTE: SEU detection is performed only for a subset of TMR latches, tdac_code[1:0] are protected by TMR but without SEU detection
-
-      LHQD1_TMR  conf_latch_0 (.D(PixelConfDataWr[0]), .E(PixelConfWr3bit), .Q(conf_latches[0]), .Q0(q0[0]), .Q1(q1[0]), .Q2(q2[0])) ;   // hit_en                                 + SEU detection
-      LHQD1      conf_latch_1 (.D(PixelConfDataWr[1]), .E(PixelConfWr3bit), .Q(conf_latches[1])                                    ) ;   // cal_en              **NO TMR**
-      LHQD1      conf_latch_2 (.D(PixelConfDataWr[2]), .E(PixelConfWr3bit), .Q(conf_latches[2])                                    ) ;   // hitOr_en            **NO TMR**
-      LHQD1      conf_latch_3 (.D(PixelConfDataWr[3]), .E(PixelConfWr5bit), .Q(conf_latches[3])                                    ) ;   // tdac_code[0]        **NO TMR**
-      LHQD1_TMR  conf_latch_4 (.D(PixelConfDataWr[4]), .E(PixelConfWr5bit), .Q(conf_latches[4])                                    ) ;   // tdac_code[1]
-      LHQD1_TMR  conf_latch_5 (.D(PixelConfDataWr[5]), .E(PixelConfWr5bit), .Q(conf_latches[5]), .Q0(q0[1]), .Q1(q1[1]), .Q2(q2[1])) ;   // tdac_code[2]                           + SEU detection
-      LHQD1_TMR  conf_latch_6 (.D(PixelConfDataWr[6]), .E(PixelConfWr5bit), .Q(conf_latches[6]), .Q0(q0[2]), .Q1(q1[2]), .Q2(q2[2])) ;   // tdac_code[3]                           + SEU detection
-      LHQD1_TMR  conf_latch_7 (.D(PixelConfDataWr[7]), .E(PixelConfWr5bit), .Q(conf_latches[7]), .Q0(q0[3]), .Q1(q1[3]), .Q2(q2[3])) ;   // tdac_code[4]                           + SEU detection
-
-      assign upset[0] = (q0[0] ^ q1[0]) | (q1[0] ^ q2[0]) ;
-      assign upset[1] = (q0[1] ^ q1[1]) | (q1[1] ^ q2[1]) ;
-      assign upset[2] = (q0[2] ^ q1[2]) | (q1[2] ^ q2[2]) ;
-      assign upset[3] = (q0[3] ^ q1[3]) | (q1[3] ^ q2[3]) ;
-
-      wire seu_any ;
-      assign seu_any = upset[0] | upset[1] | upset[2] | upset[3] ;
-
-   `endif   //_____________________________________
 
 
    ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -198,7 +185,7 @@ module FeControl (
 
    // **NOTE: the configuration readout must read actual values, not latches outputs !
    //assign PixelConfDataRd[7:0] = {conf_tdac_sign , conf_tdac_code[3:0] , conf_hitOr_en , conf_cal_en , conf_hit_en} ;
-   assign PixelConfDataRd[7:0] = {conf_tdac_code[4:0] , conf_hitOr_en , conf_cal_en , conf_hit_en} ;
+  //  assign PixelConfDataRd[7:0] = {conf_tdac_code[4:0] , conf_hitOr_en , conf_cal_en , conf_hit_en} ;
 
 
    ////////////////////////
@@ -215,14 +202,11 @@ module FeControl (
    // assign configuration bits for trimming DAC
    //
 
-`ifdef ATLAS_CHIP
    //assign FeDTH1 = (conf_tdac_sign == 1'b1) ? 4'b0000 : conf_tdac_code[3:0] ;
    //assign FeDTH2 = (conf_tdac_sign == 1'b1) ? conf_tdac_code[3:0] : 4'b0000 ;
    assign FeDTH1[3:0] = (conf_tdac_code[4] == 1'b1) ? 4'b0000 : conf_tdac_code[3:0] ;
    assign FeDTH2[3:0] = (conf_tdac_code[4] == 1'b1) ? conf_tdac_code[3:0] : 4'b0000 ;
-`elsif CMS_CHIP
-   assign FeThDac[4:0] = conf_tdac_code[4:0] ;
-`endif
+
 
    // power-down
    // assign PwrDwn = ~conf_hit_en ;   // if hit is disabled (i.e. the pixel is "masked"), the pixel logic is turned off
@@ -240,13 +224,11 @@ module FeControl (
 
 
    // enable/disable hit and hit-OR fed to pixel-region logic
-   assign HitOut = hit_mux & conf_hit_en ;
+  //  assign HitOut = hit_mux & conf_hit_en ;
+    assign HitOut = FeHit;
+    assign HitOr = FeHit;
+  //  assign HitOr = hit_mux & conf_hitOr_en ;
 
-`ifdef ATLAS_CHIP
-   assign HitOr = hit_mux & conf_hitOr_en ;
-`elsif CMS_CHIP
-   assign HitOr = (EnSeuCount == 1'b1) ? seu_any : ( hit_mux & conf_hitOr_en ) ;
-`endif
 
 endmodule : FeControl
 

@@ -44,18 +44,23 @@
 // `ifndef DIGITAL_CORE__SV   // include guard
 // `define DIGITAL_CORE__SV
 
-
+/******************************
 // post rtl audit:
-// assign pix_hit_analog = AnaHit;
-// this is the biggest change right now, treats digital injections as hits at core level
+// assign pix_hit_analog = AnaHit; treats digital injections as hits at core level for sim
 // also quad front or whatever is commented out but should just be for applying bias
 
-// WHAT NEEDS TO CHANGE TO WORK WITH THE NETWORK MEMORY:
-// NEED A SIMPLE INTERFACE: IS THERE DATA? CAN I HAVE IT
-// NETWORK LAYER CAN ALWAYS READ FROM THE LOCAL MEMORY PIN THE TOKEN HIGH 
-// AND ALWAYS LET IT READOUT 
-// 
-//
+// using token logic as is for core, pinning readIn high so core will always dump data
+// token out is used as a valid signal
+
+// added explicit signal from memory for the trigger ID (prev columns knew this already)
+
+// removed CMS STUFF
+// removed some global config HitSampleMode(CMS), ToT6to4, DualEdgeSelection (always on)
+
+// removed logic surroudning passing data through cores 
+
+// all config/bias stuff is commented out but keeping it around for reference when we do it again
+**************************/
 
 
 // `include "rtl/common/defines.sv"
@@ -128,12 +133,7 @@ module DigitalCore (
   //  output wire AnaInjectionModeOut,
   //  input  wire EnDigHitIn,          // digital injection = 1'b1, analog injection = 1'b0
   //  output wire EnDigHitOut,
-  //  input  wire Tot6to4MappingIn,    // enable/disable dual-slope 6b/4b ToT mapping
-  //  output wire Tot6to4MappingOut,
-  //  input  wire TotDualEdgeCountIn,  // enable/disable ToT counting at 80 MHz using dual-edge
-  //  output wire TotDualEdgeCountOut,
-  //  input  wire HitSampleModeIn,     // set hit sampling mode between edge-sensitive aka "asynchronous" (0) and level-sensitive aka "synchronous" (1)
-  //  output wire HitSampleModeOut,
+
    
   //  // **NOTE* CMS-only extra pin to enable SEU-counting, simple left unconnected for ATLAS (removed ifdef CMS_CHIP to have same digital I/O interface)
   //  input  wire EnSeuCountIn,
@@ -153,7 +153,7 @@ module DigitalCore (
   //  input  wire  [7:0] PixelConfDataRdIn,       // 8-bit readback configuration data **WARN: actual values, not latched values !
   //  output wire  [7:0] PixelConfDataRdOut,
 
-
+// NEED TO FIGURE OUT WHAT WE WANNA DO WITH CONFIG STUFF
    /////////////////////////////
    //   calibration section   //
    /////////////////////////////
@@ -196,8 +196,8 @@ module DigitalCore (
   //  output wire ReadOut,
 
    // triggered output data
-    output wire [`REGION_DATA_BITS-1:0] RegionDataTrig,
-    output wire [`REGION_DATA_BITS-1:0] RegionDataOut
+    output wire [`REGION_DATA_BITS-1:0] RegionDataOut,
+    output logic [`TRIG_ID_BITS-1:0] RegionTrigOut
    // tie-down
   //  output wire OutLo   // connected to a tie-down cell, used to initialize hit-ORs, pixel-configuration readback data, token and readout data in the top-most core
 
@@ -207,8 +207,7 @@ module DigitalCore (
    logic ReadIn, Readout;
    assign ReadIn = 1'b1;
 
-
-   `ifndef DIGITAL_CORE_ABSTRACT
+  //  `ifndef DIGITAL_CORE_ABSTRACT
 
 
    ////////////////////////////////////////////
@@ -220,6 +219,20 @@ module DigitalCore (
    //         (`CORE_ROWS-1) occurs inside the PixelArrayReadout module
 
    //assign CoreRowAddrOut[5:0] = CoreRowAddrIn[5:0] - 6'b1 ;
+
+  // TODO: TEMP FIX FIX FIX 
+  assign RegionDataOut = data_last_region;
+
+  localparam logic ANA_INJECTION_MODE = 1'b0;
+  localparam logic EN_DIG_HIT         = 1'b0;
+
+
+
+    //  input  wire AnaInjectionModeIn,  // uniform/alternating charge-injection mode selection
+  //  output wire AnaInjectionModeOut,
+  //  input  wire EnDigHitIn,          // digital injection = 1'b1, analog injection = 1'b0
+  localparam logic EnDigHitIn = 1'b1;
+  //  output wire EnDigHitOut,
 
    //
    // **NEW
@@ -304,38 +317,37 @@ module DigitalCore (
    //assign PixelConfWrOut = PixelConfWrIn ;
    //assign PixelConfDataWrOut[7:0] = PixelConfDataWrIn[7:0] ;
 
-   wire [11:0] local_pixel_conf_addr_in;
-   generate
-     genvar addr_inx ;
-      for(addr_inx = 0; addr_inx < 12; addr_inx++) begin : addr_conf_fork
+  //  wire [11:0] local_pixel_conf_addr_in;
+  //  generate
+  //    genvar addr_inx ;
+  //     for(addr_inx = 0; addr_inx < 12; addr_inx++) begin : addr_conf_fork
 
-          SigForkConf pixel_conf_addr_fork (.I(PixelConfAddrIn[addr_inx]), .L(local_pixel_conf_addr_in[addr_inx]), .O(PixelConfAddrOut[addr_inx])) ;
-      end
-   endgenerate 
+  //         SigForkConf pixel_conf_addr_fork (.I(PixelConfAddrIn[addr_inx]), .L(local_pixel_conf_addr_in[addr_inx]), .O(PixelConfAddrOut[addr_inx])) ;
+  //     end
+  //  endgenerate 
    
    
-   wire [7:0] pixel_conf_data_wr_buf ;   
-   generate
-     genvar data_wr_inx ;
-      for(data_wr_inx = 0; data_wr_inx < 8; data_wr_inx++) begin : data_wr_conf_fork
+  //  wire [7:0] pixel_conf_data_wr_buf ;   
+  //  generate
+  //    genvar data_wr_inx ;
+  //     for(data_wr_inx = 0; data_wr_inx < 8; data_wr_inx++) begin : data_wr_conf_fork
 
-          SigForkConf pixel_conf_data_fork (.I(PixelConfDataWrIn[data_wr_inx]), .L(pixel_conf_data_wr_buf[data_wr_inx]), .O(PixelConfDataWrOut[data_wr_inx])) ;
-      end
-   endgenerate 
+  //         SigForkConf pixel_conf_data_fork (.I(PixelConfDataWrIn[data_wr_inx]), .L(pixel_conf_data_wr_buf[data_wr_inx]), .O(PixelConfDataWrOut[data_wr_inx])) ;
+  //     end
+  //  endgenerate 
    
-   wire local_pixel_conf_wr_5bit ;
-   wire local_pixel_conf_wr_3bit ;
+  //  wire local_pixel_conf_wr_5bit ;
+  //  wire local_pixel_conf_wr_3bit ;
 
-   SigForkConf pixel_conf_wr_5bit_fork (.I(PixelConfWr5bitIn), .L(local_pixel_conf_wr_5bit), .O(PixelConfWr5bitOut)) ;
-   SigForkConf pixel_conf_wr_3bit_fork (.I(PixelConfWr3bitIn), .L(local_pixel_conf_wr_3bit), .O(PixelConfWr3bitOut)) ;
+  //  SigForkConf pixel_conf_wr_5bit_fork (.I(PixelConfWr5bitIn), .L(local_pixel_conf_wr_5bit), .O(PixelConfWr5bitOut)) ;
+  //  SigForkConf pixel_conf_wr_3bit_fork (.I(PixelConfWr3bitIn), .L(local_pixel_conf_wr_3bit), .O(PixelConfWr3bitOut)) ;
 
 
    //assign EnDigHitOut = EnDigHitIn ;
    //assign AnaInjectionModeOut = AnaInjectionModeIn ;
    //assign PixelConfDefaultOut = PixelConfDefaultIn ;
 
-   //assign TotDualEdgeCountOut = TotDualEdgeCountIn ;
-   //assign Tot6to4MappingOut = Tot6to4MappingIn ;
+
 
    // **PATCH: remove assigns already in RTL to fix LVS
 
@@ -358,22 +370,14 @@ module DigitalCore (
    //assign EnDigHitOut         = EnDigHitIn ;
    //assign AnaInjectionModeOut = AnaInjectionModeIn ;
    //assign PixelConfDefaultOut = PixelConfDefaultIn ;
-   //assign TotDualEdgeCountOut = TotDualEdgeCountIn ;
-   //assign Tot6to4MappingOut   = Tot6to4MappingIn ;
+
 
    // **REMOVE** assigns already in RTL but then let the tool to the optimize the proper buffer strength => NO dont_touch statements on these buffers, only on input signals
 
    BUFFD2LVT          EnDigHit_rtlbuf ( .I(         EnDigHitIn ), .Z(         EnDigHitOut )) ;
    BUFFD2LVT  AnaInjectionMode_rtlbuf ( .I( AnaInjectionModeIn ), .Z( AnaInjectionModeOut )) ;
    CKBD1      PixelConfDefault_rtlbuf ( .I( PixelConfDefaultIn ), .Z( PixelConfDefaultOut )) ;
-   BUFFD2LVT  TotDualEdgeCount_rtlbuf ( .I( TotDualEdgeCountIn ), .Z( TotDualEdgeCountOut )) ;
-   BUFFD2LVT    Tot6to4Mapping_rtlbuf ( .I(   Tot6to4MappingIn ), .Z(   Tot6to4MappingOut )) ;
-   //CKBD1         HitSampleMode_rtlbuf ( .I(    HitSampleModeIn ), .Z(    HitSampleModeOut )) ;   **REMOVED from ATLAS pixel chip!
 
-`ifdef CMS_CHIP
-   CKBD1         HitSampleMode_rtlbuf ( .I(    HitSampleModeIn ), .Z(    HitSampleModeOut )) ;
-   CKBD1            EnSeuCount_rtlbuf ( .I(       EnSeuCountIn ), .Z(       EnSeuCountOut )) ;
-`endif
 
 
 
@@ -401,6 +405,8 @@ module DigitalCore (
 
 
    // TrigIdIn[`TRIG_ID_BITS-1:0] => TrigIdOut[`TRIG_ID_BITS-1:0]
+   assign TrigIdOut = TrigIdIn; 
+   // prev was some buffering here with sigfork in RD53C ******
 
    wire [`TRIG_ID_BITS-1:0] local_trig_id ;
    wire [`TRIG_ID_BITS-1:0] local_trig_id_req ;
@@ -545,12 +551,9 @@ module DigitalCore (
 
    wire [7:0][7:0][7:0] pixel_conf_values ;    // effective per-pixel configuration for readback (default configuration or latched values)
 
-`ifdef ATLAS_CHIP
    wire [7:0][7:0][3:0] pix_dth1 ;             // **ATLAS: DIFF front-end trimming DAC configuration bits
    wire [7:0][7:0][3:0] pix_dth2 ;
-`elsif CMS_CHIP
-   wire [7:0][7:0][4:0] pix_tdac ;             // **CMS: LIN front-end trimming DAC configuration bits
-`endif
+
 
 
    wire [0:64][7:0] pixel_conf_data_rd ;       // all readback configuration data from pixels and from/to previous/next core
@@ -564,15 +567,15 @@ module DigitalCore (
 
    //wire [7:0] pixel_conf_data_rd_or;
    //assign pixel_conf_data_rd_or = PixelConfDataRdIn[7:0] | pixel_conf_data_rd[64];
-   generate
-      genvar pix_conf_data_rd ;
+  //  generate
+  //     genvar pix_conf_data_rd ;
 
-      for(pix_conf_data_rd = 0; pix_conf_data_rd < 8; pix_conf_data_rd++) begin : pix_conf_data_rd_fork
+  //     for(pix_conf_data_rd = 0; pix_conf_data_rd < 8; pix_conf_data_rd++) begin : pix_conf_data_rd_fork
    
-         //OR2D4LVT pix_conf_data_rd_inst (.A1(PixelConfDataRdIn[pix_conf_data_rd]), .A2(pixel_conf_data_rd[64][pix_conf_data_rd]), .Z(PixelConfDataRdOut[pix_conf_data_rd]));
-         OR2D8LVT pix_conf_data_rd_or (.A1(PixelConfDataRdIn[pix_conf_data_rd]), .A2(pixel_conf_data_rd[64][pix_conf_data_rd]), .Z(PixelConfDataRdOut[pix_conf_data_rd]));      // fix maxTran DRVs
-      end
-   endgenerate
+  //        //OR2D4LVT pix_conf_data_rd_inst (.A1(PixelConfDataRdIn[pix_conf_data_rd]), .A2(pixel_conf_data_rd[64][pix_conf_data_rd]), .Z(PixelConfDataRdOut[pix_conf_data_rd]));
+  //        OR2D8LVT pix_conf_data_rd_or (.A1(PixelConfDataRdIn[pix_conf_data_rd]), .A2(pixel_conf_data_rd[64][pix_conf_data_rd]), .Z(PixelConfDataRdOut[pix_conf_data_rd]));      // fix maxTran DRVs
+  //     end
+  //  endgenerate
 
    // synopsys dc_script_begin
    // set_dont_touch *pix_conf_data_rd_or*
@@ -600,30 +603,30 @@ module DigitalCore (
                   //
                   // pixel selection to WRITE configuration data
                   //
-                  assign pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col] = local_pixel_conf_addr_in[11:6] == CoreRowAddrIn[5:0] &  // external core address matches the local static address, AND...
-                                                                                     local_pixel_conf_addr_in[5:4]  == quad_row &            // quad row in the core
-                                                                                     local_pixel_conf_addr_in[3]    == pix_row &             // pixel row in the selected quad (0=top/1=bottom)
-                                                                                     local_pixel_conf_addr_in[2]    == (quad_col > 1) &      // left 1x4 or right 1x4
-                                                                                     local_pixel_conf_addr_in[1]    == (quad_col%2) &        // 1x2 left or right
-                                                                                     local_pixel_conf_addr_in[0]    == pix_col ;             // pixel_col in 1x2
+                  // assign pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col] = local_pixel_conf_addr_in[11:6] == CoreRowAddrIn[5:0] &  // external core address matches the local static address, AND...
+                  //                                                                    local_pixel_conf_addr_in[5:4]  == quad_row &            // quad row in the core
+                  //                                                                    local_pixel_conf_addr_in[3]    == pix_row &             // pixel row in the selected quad (0=top/1=bottom)
+                  //                                                                    local_pixel_conf_addr_in[2]    == (quad_col > 1) &      // left 1x4 or right 1x4
+                  //                                                                    local_pixel_conf_addr_in[1]    == (quad_col%2) &        // 1x2 left or right
+                  //                                                                    local_pixel_conf_addr_in[0]    == pix_col ;             // pixel_col in 1x2
 
-                                                                                     // **OBSOLETE: broadcast mode no more requested
-                                                                                     //local_pixel_conf_addr_in[0]    == pix_col |             // pixel_col in 1x2
-                                                                                     //local_pixel_conf_addr_in[11:0] == {12{1'b1}} ;          // OR we are in broadcast mode otherwise
+                  //                                                                    // **OBSOLETE: broadcast mode no more requested
+                  //                                                                    //local_pixel_conf_addr_in[0]    == pix_col |             // pixel_col in 1x2
+                  //                                                                    //local_pixel_conf_addr_in[11:0] == {12{1'b1}} ;          // OR we are in broadcast mode otherwise
 
-                  // final per-pixel write-enable
-                  assign pixel_conf_wr_5bit[quad_row*2+pix_row][quad_col*2+pix_col] = local_pixel_conf_wr_5bit & pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col] ;
-                  assign pixel_conf_wr_3bit[quad_row*2+pix_row][quad_col*2+pix_col] = local_pixel_conf_wr_3bit & pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col] ;
+                  // // final per-pixel write-enable
+                  // assign pixel_conf_wr_5bit[quad_row*2+pix_row][quad_col*2+pix_col] = local_pixel_conf_wr_5bit & pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col] ;
+                  // assign pixel_conf_wr_3bit[quad_row*2+pix_row][quad_col*2+pix_col] = local_pixel_conf_wr_3bit & pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col] ;
 
 
-                  //
-                  // pixel section to READBACK configuration data
-                  //
-                  localparam int pix_idx = (quad_row*2+pix_row)*8 + (quad_col*2+pix_col) + 1 ; // pix_idx = 0 is previous core
+                  // //
+                  // // pixel section to READBACK configuration data
+                  // //
+                  // localparam int pix_idx = (quad_row*2+pix_row)*8 + (quad_col*2+pix_col) + 1 ; // pix_idx = 0 is previous core
 
-                  assign pixel_conf_data_rd[pix_idx][7:0] = pixel_conf_data_rd[pix_idx-1][7:0] |
-                                                            (pixel_conf_values[quad_row*2+pix_row][quad_col*2+pix_col][7:0] &
-                                                       {8{pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col]}}) ;
+                  // assign pixel_conf_data_rd[pix_idx][7:0] = pixel_conf_data_rd[pix_idx-1][7:0] |
+                  //                                           (pixel_conf_values[quad_row*2+pix_row][quad_col*2+pix_col][7:0] &
+                  //                                      {8{pixel_conf_select[quad_row*2+pix_row][quad_col*2+pix_col]}}) ;
 
                end   // for pix_col
             end   // for pix_row
@@ -774,16 +777,16 @@ module DigitalCore (
 
             FeControl   FeControl_LL (
 
-               // configuration section
-               .PixelConfDefault (                            PixelConfDefaultOut ),
-               .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+1][quad_col*2+0] ),
-               .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+1][quad_col*2+0] ),
-               .PixelConfDataWr  (                         pixel_conf_data_wr_buf ),
-               .PixelConfDataRd  (  pixel_conf_values[quad_row*2+1][quad_col*2+0] ),
-               .PwrDwn           (     pix_power_down[quad_row*2+1][quad_col*2+0] ),
-            `ifdef CMS_CHIP
-               .EnSeuCount       (                                  EnSeuCountOut ),
-            `endif
+            //    // configuration section
+            //    .PixelConfDefault (                            PixelConfDefaultOut ),
+            //    .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+1][quad_col*2+0] ),
+            //    .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+1][quad_col*2+0] ),
+            //    .PixelConfDataWr  (                         pixel_conf_data_wr_buf ),
+            //    .PixelConfDataRd  (  pixel_conf_values[quad_row*2+1][quad_col*2+0] ),
+            //    .PwrDwn           (     pix_power_down[quad_row*2+1][quad_col*2+0] ),
+            // `ifdef CMS_CHIP
+            //    .EnSeuCount       (                                  EnSeuCountOut ),
+            // `endif
 
                // calibration section
                .DefaultCalEn     (                  (quad_row == 0) ? 1'b1 : 1'b0 ),   // **NOTE: charge-injection is enabled by default in the two pixel-rows at the top of the core
@@ -793,12 +796,8 @@ module DigitalCore (
                .FeS1             (             pix_s1[quad_row*2+1][quad_col*2+0] ),
 
                // configuration bits to the trimming DAC
-            `ifdef ATLAS_CHIP
                .FeDTH1           (      pix_dth1[quad_row*2+1][quad_col*2+0][3:0] ),
                .FeDTH2           (      pix_dth2[quad_row*2+1][quad_col*2+0][3:0] ),
-            `elsif CMS_CHIP
-               .FeThDac          (      pix_tdac[quad_row*2+1][quad_col*2+0][4:0] ),
-            `endif
 
                // hit pulse from analog front-end
                .FeHit            (     pix_hit_analog[quad_row*2+1][quad_col*2+0] ),
@@ -816,15 +815,15 @@ module DigitalCore (
             FeControl   FeControl_LR (
 
                // configuration section
-               .PixelConfDefault (                            PixelConfDefaultOut ),
-               .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+1][quad_col*2+1] ),
-               .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+1][quad_col*2+1] ),
-               .PixelConfDataWr  (                         pixel_conf_data_wr_buf ),
-               .PixelConfDataRd  (  pixel_conf_values[quad_row*2+1][quad_col*2+1] ),
-               .PwrDwn           (     pix_power_down[quad_row*2+1][quad_col*2+1] ),
-            `ifdef CMS_CHIP
-               .EnSeuCount       (                                  EnSeuCountOut ),
-            `endif
+            //    .PixelConfDefault (                            PixelConfDefaultOut ),
+            //    .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+1][quad_col*2+1] ),
+            //    .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+1][quad_col*2+1] ),
+            //    .PixelConfDataWr  (                         pixel_conf_data_wr_buf ),
+            //    .PixelConfDataRd  (  pixel_conf_values[quad_row*2+1][quad_col*2+1] ),
+            //    .PwrDwn           (     pix_power_down[quad_row*2+1][quad_col*2+1] ),
+            // `ifdef CMS_CHIP
+            //    .EnSeuCount       (                                  EnSeuCountOut ),
+            // `endif
                // calibration section
                .DefaultCalEn     (                  (quad_row == 0) ? 1'b1 : 1'b0 ),
                .EvenOddS0        (                                        S0_even ),   // even pixel
@@ -833,12 +832,8 @@ module DigitalCore (
                .FeS1             (             pix_s1[quad_row*2+1][quad_col*2+1] ),
 
                // configuration bits to the trimming DAC
-            `ifdef ATLAS_CHIP
                .FeDTH1           (      pix_dth1[quad_row*2+1][quad_col*2+1][3:0] ),
                .FeDTH2           (      pix_dth2[quad_row*2+1][quad_col*2+1][3:0] ),
-            `elsif CMS_CHIP
-               .FeThDac          (      pix_tdac[quad_row*2+1][quad_col*2+1][4:0] ),
-            `endif
 
                // hit pulse from analog front-end
                .FeHit            (     pix_hit_analog[quad_row*2+1][quad_col*2+1] ),
@@ -855,16 +850,16 @@ module DigitalCore (
 
             FeControl   FeControl_UL (
 
-               // configuration section
-               .PixelConfDefault (                            PixelConfDefaultOut ),
-               .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+0][quad_col*2+0] ),
-               .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+0][quad_col*2+0] ),
-               .PixelConfDataWr  (                         pixel_conf_data_wr_buf ),
-               .PixelConfDataRd  (  pixel_conf_values[quad_row*2+0][quad_col*2+0] ),
-               .PwrDwn           (     pix_power_down[quad_row*2+0][quad_col*2+0] ),
-            `ifdef CMS_CHIP
-               .EnSeuCount       (                                  EnSeuCountOut ),
-            `endif
+            //    // configuration section
+            //    .PixelConfDefault (                            PixelConfDefaultOut ),
+            //    .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+0][quad_col*2+0] ),
+            //    .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+0][quad_col*2+0] ),
+            //    .PixelConfDataWr  (                         pixel_conf_data_wr_buf ),
+            //    .PixelConfDataRd  (  pixel_conf_values[quad_row*2+0][quad_col*2+0] ),
+            //    .PwrDwn           (     pix_power_down[quad_row*2+0][quad_col*2+0] ),
+            // `ifdef CMS_CHIP
+            //    .EnSeuCount       (                                  EnSeuCountOut ),
+            // `endif
                // calibration section
                .DefaultCalEn     (                  (quad_row == 0) ? 1'b1 : 1'b0 ),
                .EvenOddS0        (                                        S0_even ),   // even pixel
@@ -873,12 +868,8 @@ module DigitalCore (
                .FeS1             (             pix_s1[quad_row*2+0][quad_col*2+0] ),
 
                // configuration bits to the trimming DAC
-            `ifdef ATLAS_CHIP
                .FeDTH1           (      pix_dth1[quad_row*2+0][quad_col*2+0][3:0] ),
                .FeDTH2           (      pix_dth2[quad_row*2+0][quad_col*2+0][3:0] ),
-            `elsif CMS_CHIP
-               .FeThDac          (      pix_tdac[quad_row*2+0][quad_col*2+0][4:0] ),
-            `endif
 
                // hit pulse from analog front-end
                .FeHit            (     pix_hit_analog[quad_row*2+0][quad_col*2+0] ),
@@ -896,15 +887,15 @@ module DigitalCore (
             FeControl   FeControl_UR (
 
                // configuration section
-               .PixelConfDefault (                            PixelConfDefaultOut ),
-               .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+0][quad_col*2+1] ),
-               .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+0][quad_col*2+1] ),
-               .PixelConfDataWr  (                    pixel_conf_data_wr_buf[7:0] ),
-               .PixelConfDataRd  (  pixel_conf_values[quad_row*2+0][quad_col*2+1] ),
-               .PwrDwn           (     pix_power_down[quad_row*2+0][quad_col*2+1] ),
-            `ifdef CMS_CHIP
-               .EnSeuCount       (                                  EnSeuCountOut ),
-            `endif
+            //    .PixelConfDefault (                            PixelConfDefaultOut ),
+            //    .PixelConfWr5bit  ( pixel_conf_wr_5bit[quad_row*2+0][quad_col*2+1] ),
+            //    .PixelConfWr3bit  ( pixel_conf_wr_3bit[quad_row*2+0][quad_col*2+1] ),
+            //    .PixelConfDataWr  (                    pixel_conf_data_wr_buf[7:0] ),
+            //    .PixelConfDataRd  (  pixel_conf_values[quad_row*2+0][quad_col*2+1] ),
+            //    .PwrDwn           (     pix_power_down[quad_row*2+0][quad_col*2+1] ),
+            // `ifdef CMS_CHIP
+            //    .EnSeuCount       (                                  EnSeuCountOut ),
+            // `endif
                // calibration section
                .DefaultCalEn     (                  (quad_row == 0) ? 1'b1 : 1'b0 ),
                .EvenOddS0        (                                         S0_odd ),   // odd pixel
@@ -913,12 +904,8 @@ module DigitalCore (
                .FeS1             (             pix_s1[quad_row*2+0][quad_col*2+1] ),
 
                // configuration bits to the trimming DAC
-            `ifdef ATLAS_CHIP
                .FeDTH1           (      pix_dth1[quad_row*2+0][quad_col*2+1][3:0] ),
                .FeDTH2           (      pix_dth2[quad_row*2+0][quad_col*2+1][3:0] ),
-            `elsif CMS_CHIP
-               .FeThDac          (      pix_tdac[quad_row*2+0][quad_col*2+1][4:0] ),
-            `endif 
 
                // hit pulse from analog front-end
                .FeHit            (     pix_hit_analog[quad_row*2+0][quad_col*2+1] ),
@@ -938,7 +925,8 @@ module DigitalCore (
    endgenerate
 
 
-
+  assign PwrDwn = '0;
+  assign pix_power_down = '0;
    /////////////////////////////////////
    //   pixel-regions instantiation   //
    /////////////////////////////////////
@@ -1007,6 +995,10 @@ module DigitalCore (
    //
    // replicate pixel regions
    //
+
+   wire [`TRIG_ID_BITS-1:0] region_trig_bus [15:0];
+
+
    generate
 
       genvar r ;  // r = 0,1, .. 15
@@ -1019,14 +1011,6 @@ module DigitalCore (
             .Clk              (                                      del_clk ),
             .Reset_b          (                                local_reset_b ),
 
-            // global configuration
-            .TotDualEdgeCount (                          TotDualEdgeCountOut ),
-            .Tot6to4Mapping   (                            Tot6to4MappingOut ),
-
-         `ifdef CMS_CHIP
-            .HitSampleMode    (                             HitSampleModeOut ),
-         `endif
-         
             // from pixels
             .Hit              (            pix_hit [r/2][(r%2 + 1)*4 -1 -:4] ),   // **NOTE: input [3:0] Hit
             .PwrDwn           (    pix_power_down[r/2][(r%2 + 1)*4 -1 -: 4 ] ),   // **NOTE: input [3:0] PwrDwn
@@ -1036,13 +1020,14 @@ module DigitalCore (
             .LatCntReq        ( local_lat_cnt_req[`LATENCY_COUNTER_BITS-1:0] ),
             .Trig             (                                   local_trig ),
             .TrigClear        (                             local_trig_clear ),
-            .TrigId           (             local_trig_id[`TRIG_ID_BITS-1:0] ),
+            .TrigIdIn           (              TrigIdIn), // from top level 
 
             // data readout
             .TokIn            (                                   tok_int[r] ),
             .TokOut           (                                 tok_int[r+1] ),
             .Read             (                                  read_region ),
-            .DataToCore       (    region_data_bus[r][`REGION_DATA_BITS-1:0] )
+            .DataToCore       (    region_data_bus[r][`REGION_DATA_BITS-1:0] ),
+            .RegionTrigOut        (                       region_trig_bus[r] )
 
          ) ;
 
@@ -1050,6 +1035,14 @@ module DigitalCore (
    endgenerate
 
 
+  always_comb begin
+    RegionTrigOut = '0; // default
+    for (int i = 0; i < 16; i++) begin
+      if (tok_int[i]) begin
+        RegionTrigOut = region_trig_bus[i]; // do we want a bus here? idk
+      end
+    end
+  end
 
   
    ////////////////////////////
@@ -1080,38 +1073,14 @@ module DigitalCore (
       end
    endgenerate
 
-`ifdef ATLAS_CHIP
-
-   //assign HitOrOut[3:0] = hit_or_int[15][3:0] | HitOrIn[3:0] ;   // combine with hit-ORs from previous core
-
-
-
-`elsif CMS_CHIP
-
-   // infer 4x one-FF edge detectors for SEU counting (generate 4x single-pulses on HitOr lines from FeControl)
-
-   logic [3:0] seu_any, seu_any_b_ff, seu_any_pulse, hitor_or_seu_any ;
-   
-   always_ff @(posedge del_clk) begin
-      seu_any_b_ff[3:0] <= ~seu_any[3:0] ;
-   end
-
-   generate 
-      genvar i ;
-
-      for(i = 0; i < 4; i++) begin
-
-         assign seu_any[i] = hit_or_int[15][i] ;                   // use 4 edge detectors, do not OR multiple HitOr lines
-         assign seu_any_pulse[i] = seu_any_b_ff[i] & seu_any[i] ;
-
-         // muxing seu_any_pulse to hit_or 
-         assign hitor_or_seu_any[i] = (EnSeuCountOut == 1'b1) ? seu_any_pulse[i] : hit_or_int[15][i] ;
-      end
-   endgenerate
+  // TODO check if this is used!!!!!!!!!
+  //  //assign HitOrOut[3:0] = hit_or_int[15][3:0] | HitOrIn[3:0] ;   // combine with hit-ORs from previous core
+  //  OR2D8LVT hit_or0_lvt ( .A1( hit_or_int[15][0] ), .A2( HitOrIn[0] ), .Z( HitOrOut[0] )) ;
+  //  OR2D8LVT hit_or1_lvt ( .A1( hit_or_int[15][1] ), .A2( HitOrIn[1] ), .Z( HitOrOut[1] )) ;
+  //  OR2D8LVT hit_or2_lvt ( .A1( hit_or_int[15][2] ), .A2( HitOrIn[2] ), .Z( HitOrOut[2] )) ;
+  //  OR2D8LVT hit_or3_lvt ( .A1( hit_or_int[15][3] ), .A2( HitOrIn[3] ), .Z( HitOrOut[3] )) ;
 
 
-   
- `endif
  
    // synopsys dc_script_begin
    // set_dont_touch hit_or0_lvt
@@ -1156,7 +1125,6 @@ module DigitalCore (
 
    wire [15:0] data_last_region = data_or_stage_two[15:0] & {16{this_core_read}};
 
-   //
    // get the address of pixel-regions from the map of tokens
    //
 
@@ -1166,23 +1134,17 @@ module DigitalCore (
    // token-map to address encoder
    RegionAddrEnc   RegionAddrEnc (.TokMap(tok_map[15:0]), .RegionAddr(region_addr[3:0]) ) ;
 
-   // concatenate core-row address and pixel-region address to build the full pixel-region address inside a core-column
-   wire [`REGION_ADDRESS_BITS-1:0] col_region_addr ;
-   assign col_region_addr[`REGION_ADDRESS_BITS-1:0] = { CoreRowAddrIn[`CORE_ROW_ADDRESS_BITS-1:0] , region_addr[3:0] } & {`REGION_ADDRESS_BITS{this_core_read}};
+  //  // concatenate core-row address and pixel-region address to build the full pixel-region address inside a core-column
+  //  wire [`REGION_ADDRESS_BITS-1:0] col_region_addr ;
+  //  assign col_region_addr[`REGION_ADDRESS_BITS-1:0] = { CoreRowAddrIn[`CORE_ROW_ADDRESS_BITS-1:0] , region_addr[3:0] } & {`REGION_ADDRESS_BITS{this_core_read}};
 
-   generate
-      genvar d ;
-      for(d = 0; d < `REGION_DATA_BITS; d++) begin: data_or_gen
-          OR2D8LVT data_or (.A1(RegionDataIn[d]), .A2(data_last_region[d]), .Z(RegionDataOut[d]));
-      end
-   endgenerate
 
-   generate
-      genvar a ;
-      for(a = 0; a < `REGION_ADDRESS_BITS; a++) begin: addr_or_gen
-          OR2D8LVT addr_or (.A1(RegionAddrIn[a]), .A2(col_region_addr[a]), .Z(RegionAddrOut[a]));
-      end
-   endgenerate
+  //  generate
+  //     genvar a ;
+  //     for(a = 0; a < `REGION_ADDRESS_BITS; a++) begin: addr_or_gen
+  //         OR2D8LVT addr_or (.A1(RegionAddrIn[a]), .A2(col_region_addr[a]), .Z(RegionAddrOut[a]));
+  //     end
+  //  endgenerate
 
 
     // synopsys dc_script_begin

@@ -125,14 +125,14 @@ module NetworkedCore (
     input logic valid_l_in,
     input logic valid_r_in
 
-    `ifdef NETWORKSIM
-    // Testbench hooks: drive the local-core source directly.
-    // core_mem_valid_tb : assert to mark local_data_packet as valid data.
-    // local_data_packet_tb : the packet the "core" is presenting this cycle.
-    ,
-    input logic                     core_mem_valid_tb,
-    input logic [`PACKET_SIZE-1:0]  local_data_packet_tb
-    `endif
+    // `ifdef NETWORKSIM
+    // // Testbench hooks: drive the local-core source directly.
+    // // core_mem_valid_tb : assert to mark local_data_packet as valid data.
+    // // local_data_packet_tb : the packet the "core" is presenting this cycle.
+    // ,
+    // input logic                     core_mem_valid_tb,
+    // input logic [`PACKET_SIZE-1:0]  local_data_packet_tb
+    // `endif
 );
 
 
@@ -154,7 +154,6 @@ logic [`PACKET_SIZE-1:0] data_bus_r_o;
 
 
 // core wrapper/ logic + packet gen stage
-logic [`PACKET_SIZE-1:0] RegionDataTrig;
 logic [`PACKET_SIZE-1:0] local_data_packet;
 logic [`PACKET_SIZE-1:0] selected_data_packet;
 
@@ -184,14 +183,14 @@ logic [3:0] transact_n;
 
 // digital core interaction
 logic [`REGION_DATA_BITS-1:0] RegionDataOut;
-logic [`TRIG_ID_BITS-1:0] RegionTrigId;
+logic [`TRIG_ID_BITS-1:0] RegionTrigOut;
 
 logic [4:0] slot_src [`NETWORK_MEM_DEPTH-1:0];
 
 // CORE WRAPPER
 // digital core instantiation, best guess for signals needs some modifications...
 
-DigitalCoreStub DigitalCoreStub (
+DigitalCore DigitalCore (
     .AnaHit(AnaHit),
 
     .VBP_PREAMP_A(VBP_PREAMP_A),
@@ -240,8 +239,8 @@ DigitalCoreStub DigitalCoreStub (
     .TokIn(TokIn),
     .TokOut(TokOut),
 
-    .RegionDataTrig(RegionDataTrig),
-    .RegionDataOut(RegionDataOut)
+    .RegionDataOut(RegionDataOut),
+    .RegionTrigOut(RegionTrigOut)
 );
 
 assign TokIn = 1'b0; // keep low, lets core readout whenever
@@ -253,13 +252,13 @@ assign TokIn = 1'b0; // keep low, lets core readout whenever
   //  assign local_data_packet = local_data_packet_tb;
   // use token and actual core logic
   assign core_mem_valid = TokOut; // 1 if core has data remaining;
-  assign local_data_packet = {CoreRowAddrIn, RegionDataTrig, RegionDataOut};
+  assign local_data_packet = {CoreRowAddrIn, RegionTrigOut, RegionDataOut};
 `else
    // Synth/normal: local core source not yet wired temp filler
   //  assign core_mem_valid    = 1'b0;
   //  assign local_data_packet = '0;
   assign core_mem_valid = TokOut; // 1 if core has data remaining;
-  assign local_data_packet = {CoreRowAddrIn, RegionDataTrig, RegionDataOut};
+  assign local_data_packet = {CoreRowAddrIn, RegionTrigOut, RegionDataOut};
 `endif
 
 
@@ -294,11 +293,17 @@ assign valid_r_o = routing_decision[3] && local_data_valid;
 // Transaction occurs when exactly one side asserts valid
 // Order: Up, Down, Left, Right
 always_ff @(negedge ClkIn) begin
-    transact_n[0] <= valid_up_o ^ valid_up_in;
-    transact_n[1] <= valid_dn_o ^ valid_dn_in;
-    transact_n[2] <= valid_l_o  ^ valid_l_in;
-    transact_n[3] <= valid_r_o  ^ valid_r_in;
+    if (!ResetIn_b) begin
+        transact_n <= '0;
+    end else begin
+        transact_n[0] <= valid_up_o ^ valid_up_in;
+        transact_n[1] <= valid_dn_o ^ valid_dn_in;
+        transact_n[2] <= valid_l_o  ^ valid_l_in;
+        transact_n[3] <= valid_r_o  ^ valid_r_in;
+    end
 end
+
+
 // this core is asserting for a transaction
 assign assert_n[0] = transact_n[0] && valid_up_o;
 assign assert_n[1] = transact_n[1] && valid_dn_o;
@@ -429,7 +434,8 @@ always_ff @(posedge ClkIn) begin
           5'b01000: network_mem[mem_idx] <= data_bus_l_in;
           5'b10000: network_mem[mem_idx] <= data_bus_r_in;
           // should never reach this
-          default:  $error("NetworkedCore: Wen high but slot_src empty (slot %0d)", mem_idx);
+          // default:  $error("NetworkedCore: Wen high but slot_src empty (slot %0d)", mem_idx); 
+          // System task ($error) cannot be synthesized in an always_ff process.^
         endcase
         // if no cases match: Wen was high (there was valid data and this slot was free)
         // and then the valid_arr was empty this should never happen

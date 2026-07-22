@@ -17,7 +17,13 @@
 //-----------------------------------------------------------------------------------------------------
 
 
-// post rtl audit: basically the same 
+/* GRAMMY NOTES
+added RegionTrigOut, digital core/network layer need trigger to generate packet
+prev wasn't needed bcs this was known by the core
+
+removed TrigIdReq since data starts flowing the moment it is triggered and not 
+blocked by other regions in same core
+*/
 
 `ifndef LATENCY_MEM__SV   // include guard
 `define LATENCY_MEM__SV
@@ -56,7 +62,8 @@ module LatencyMem (
     input  wire Read,                                       // read request issued from Core-Column Readout Controller (CCRC) in the chip periphery
     output wire [`LATENCY_MEM_DEPTH-1:0] TotMemWriteAddr,   // write pointer for the per-pixel ToT memories, selects the memory slot to be used to store new ToT values
     output wire [`LATENCY_MEM_DEPTH-1:0] TotMemReadAddr,    // read pointer for the per-pixel ToT memories, selects memory slot to read ToT values from
-    output wire DataToCoreEn                                // output data MUX enable
+    output wire DataToCoreEn,                                // output data MUX enable
+    output wire [`TRIG_ID_BITS-1:0] RegionTrigOut
  
     ) ;
  
@@ -68,9 +75,10 @@ module LatencyMem (
     // OR-together all ClkLatMemEn output flags from replicated LatencyMemCell modules to enable the clock
     wire [`LATENCY_MEM_DEPTH-1:0] clk_lat_mem_en ;
     wire clk_lat_mem_gated ;
+
+    wire [`TRIG_ID_BITS-1:0] TrigIdArrOut [`LATENCY_MEM_DEPTH-1:0]; // trig id bits for each memory slot!!!
  
     CG_MOD cg_start(.ClkIn(Clk), .Enable(|clk_lat_mem_en), .ClkOut(clk_lat_mem_gated)) ;
- 
  
  
     /////////////////////////////////////////////////////////
@@ -120,6 +128,7 @@ module LatencyMem (
                 .Trig        (                                 Trig ),
                 .TrigClear   (                            TrigClear ),
                 .TrigId      (            TrigId[`TRIG_ID_BITS-1:0] ),
+                .TrigIdOut   (      TrigIdArrOut[k][`TRIG_ID_BITS-1:0] ), // could make shared bus or something idk
                 .ClkLatMemEn (                    clk_lat_mem_en[k] ),
                 .ReadyToRead (                     ready_to_read[k] ),
                 .Full        (                              full[k] )
@@ -156,6 +165,19 @@ module LatencyMem (
  
     // read-pointer to get ToT values from selected ToT memory slot
     assign TotMemReadAddr[`LATENCY_MEM_DEPTH-1:0] = (DataToCoreEn == 1'b1) ? ready_to_read[`LATENCY_MEM_DEPTH-1:0] : {`LATENCY_MEM_DEPTH{1'b0}} ;
+
+    // assign RegionTrigOut = TrigIdArrOut[TotMemReadAddr]; // get the associated trigger for selected memory // TrigIdOut TODO NAMING 
+    logic [`TRIG_ID_BITS-1:0] RegionTrigOut_comb;
+    always_comb begin
+        RegionTrigOut_comb = '0;
+        for (int i = 0; i < `LATENCY_MEM_DEPTH; i++) begin
+            if (TotMemReadAddr[i]) RegionTrigOut_comb = TrigIdArrOut[i];
+        end
+    end
+    assign RegionTrigOut = RegionTrigOut_comb;
+
+    
+    
  
  
  
