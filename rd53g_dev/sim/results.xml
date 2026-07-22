@@ -1,8 +1,9 @@
 <testsuites name="results">
   <testsuite name="all" package="all">
-    <property name="random_seed" value="1784690292" />
-    <testcase name="network_layer_base_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="367" time="0.03693652153015137" sim_time_ns="3.8" ratio_time="102.87920579900982" />
-    <testcase name="multi_inject_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="432" time="0.008643150329589844" sim_time_ns="6.199999999999999" ratio_time="717.3310382875427" />
-    <testcase name="local_bypass_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="455" time="0.006267070770263672" sim_time_ns="6.6" ratio_time="1053.1235790915316" />
+    <property name="random_seed" value="1784742609" />
+    <testcase name="network_layer_base_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="369" time="0.034301042556762695" sim_time_ns="5.4" ratio_time="157.4296172212221" />
+    <testcase name="multi_inject_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="403" time="0.002958059310913086" sim_time_ns="4.200000000000001" ratio_time="1419.8498267107282" />
+    <testcase name="local_mem_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="434" time="0.006770133972167969" sim_time_ns="7.399999999999999" ratio_time="1093.0359768981546" />
+    <testcase name="local_bypass_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="457" time="0.005231618881225586" sim_time_ns="7.0" ratio_time="1338.0179556122682" />
   </testsuite>
 </testsuites>

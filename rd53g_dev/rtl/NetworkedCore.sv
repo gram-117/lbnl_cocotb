@@ -24,14 +24,11 @@
 TODO: 
 FIGURE OUT CONFIG STUFF
 
-
 ADD STEADY STATE 1 CYCLE HIT (clock in and out of same register)
 need to do this by chooiing to write into the slot that is selected by the rptr
 
 
 */
-// comment out for sim with digital core
-`define NETWORKSIM
 
 module NetworkedCore (
    // TO DIGITAL CORE
@@ -125,14 +122,6 @@ module NetworkedCore (
     input logic valid_l_in,
     input logic valid_r_in
 
-    // `ifdef NETWORKSIM
-    // // Testbench hooks: drive the local-core source directly.
-    // // core_mem_valid_tb : assert to mark local_data_packet as valid data.
-    // // local_data_packet_tb : the packet the "core" is presenting this cycle.
-    // ,
-    // input logic                     core_mem_valid_tb,
-    // input logic [`PACKET_SIZE-1:0]  local_data_packet_tb
-    // `endif
 );
 
 
@@ -184,6 +173,7 @@ logic [3:0] transact_n;
 // digital core interaction
 logic [`REGION_DATA_BITS-1:0] RegionDataOut;
 logic [`TRIG_ID_BITS-1:0] RegionTrigOut;
+logic [3:0] RegionAddrOut;
 
 logic [4:0] slot_src [`NETWORK_MEM_DEPTH-1:0];
 
@@ -240,26 +230,16 @@ DigitalCore DigitalCore (
     .TokOut(TokOut),
 
     .RegionDataOut(RegionDataOut),
+    .RegionAddrOut(RegionAddrOut),
     .RegionTrigOut(RegionTrigOut)
 );
 
 assign TokIn = 1'b0; // keep low, lets core readout whenever
 
 // NETWORK LAYER
-`ifdef NETWORKSIM
-   // Sim: local-core source is driven by the testbench. OLD 
-  //  assign core_mem_valid    = core_mem_valid_tb;
-  //  assign local_data_packet = local_data_packet_tb;
-  // use token and actual core logic
+
   assign core_mem_valid = TokOut; // 1 if core has data remaining;
-  assign local_data_packet = {CoreRowAddrIn, RegionTrigOut, RegionDataOut};
-`else
-   // Synth/normal: local core source not yet wired temp filler
-  //  assign core_mem_valid    = 1'b0;
-  //  assign local_data_packet = '0;
-  assign core_mem_valid = TokOut; // 1 if core has data remaining;
-  assign local_data_packet = {CoreRowAddrIn, RegionTrigOut, RegionDataOut};
-`endif
+  assign local_data_packet = {CoreRowAddrIn, RegionAddrOut, RegionTrigOut, RegionDataOut};
 
 
 // // ROUTER

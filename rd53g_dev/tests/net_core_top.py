@@ -52,7 +52,7 @@ async def initialize_inputs(dut) -> None:
     # --- digital-core / config side: hold quiescent ---
     dut.ResetIn_b.value = 1
     dut.AnaHit.value = 0
-    dut.CoreRowAddrIn.value = 0
+    dut.CoreRowAddrIn.value = 7
     dut.CalEdgeIn.value = 0
     dut.CalAuxIn.value = 0
     dut.LatCntIn.value = 0
@@ -215,6 +215,7 @@ async def inject_local_mem(dut, hitmask: int) -> None:
 
     # Packets are captured here.
     await RisingEdge(dut.ClkIn)
+    await RisingEdge(dut.ClkIn)
 
     dut._log.info(
         f"After write posedge: free={dut.TokOut.value}, "
@@ -222,6 +223,7 @@ async def inject_local_mem(dut, hitmask: int) -> None:
 
     dut.LatCntReqIn.value = 5
     dut.TrigIn.value = 1
+    dut.LatCntIn.value = 0 # change lat cnt to something else
     # trigger and then reset it
     await RisingEdge(dut.ClkIn)
     dut.TrigIn.value = 0
@@ -391,7 +393,7 @@ async def network_layer_base_test(dut):
         assert occupancy == 0, f"Expected empty buffer, got {occupancy}"
         dut._log.info(f"Routed packet 0x{observed:x} to RIGHT; buffer drained")
 
-        await wait_rising_edges(dut, 3)  # let counters stabilize
+        await wait_rising_edges(dut, 7)  # let counters stabilize
 
     finally:
         if clk_task is not None:
@@ -422,7 +424,7 @@ async def multi_inject_test(dut):
         )
         dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
 
-        await wait_rising_edges(dut, 3)  # let counters stabilize
+        await wait_rising_edges(dut, 5)  # let counters stabilize
 
     finally:
         if clk_task is not None:
@@ -430,7 +432,7 @@ async def multi_inject_test(dut):
 
 
 @cocotb.test()
-async def multi_inject_test(dut):
+async def local_mem_test(dut):
     """Fill up local memory."""
 
     clk_task = cocotb.start_soon(generate_clock(dut))
@@ -439,11 +441,11 @@ async def multi_inject_test(dut):
         await initialize_inputs(dut)
         await reset_dut(dut)
 
-        mask = 31
+        mask = (1 << 16) - 1
 
         await inject_local_mem(dut, mask)
 
-        for i in range(5):
+        for i in range(7):
           await wait_rising_edges(dut, 1)
           dut._log.info(f"TokOut {dut.TokOut.value}, localpacket {dut.local_data_packet.value}")
 
@@ -462,10 +464,8 @@ async def local_bypass_test(dut):
         await initialize_inputs(dut)
         await reset_dut(dut)
 
-        # Network is empty after reset -> core_mem_passthrough = &network_m_free = 1.
-        bypass_packet = 0x0BADF00D & ((1 << PACKET_SIZE) - 1)
-        mask = 1
-        await inject_local_mem(dut, mask)
+        mask = (1 << 16) - 1
+        await inject_local_mem(dut, 31)
 
 
         dut.valid_up_in.value = 0

@@ -54,13 +54,8 @@
       `define LHC_EXPERIMENT  "ATLAS"
       `define CORE_COLUMNS     50           // 50 x 8 = 400 pixel columns (20 mm padframe width)
       `define CORE_ROWS        48           // 48 x 8 = 384 pixel rows
+    `endif
 
-   `elsif CMS_CHIP                          // CMS final chip
-      `define LHC_EXPERIMENT   "CMS"
-      `define CORE_COLUMNS     54           // 54 x 8 = 432 pixel columns (22 mm padframe width)
-      `define CORE_ROWS        42           // 42 x 8 = 336 pixel rows
-
-   `endif
 
    `ifdef SMALLERCHIP 
         `define  ROWS 4 
@@ -76,7 +71,7 @@
 
 // number of bits required to address all core-rows
 //`define CORE_ROW_ADDRESS_BITS   $clog2(`CORE_ROWS)      // **NOTE: 6-bit to address 48 (42) core-rows in ATLAS (CMS) chip
-`define CORE_ROW_ADDRESS_BITS   6
+`define CORE_ROW_ADDRESS_BITS   6 // number of bits to address all cores (not just row 64)
 
 // number of bits required to address a per-pixel Pixel Configuration Register (PCR)
 `define PCR_ADDRESS_BITS   (`CORE_ROW_ADDRESS_BITS + 4 + 2)                          // **NOTE: 12-bit, 6-bit for the core + 4-bit to address the pixel-region + 2-bit pixel
@@ -118,7 +113,8 @@
 
 // NEW GRAMMY;
 `define CORE_ADDR_BITS 6 // assuming 64 cores for now
-`define PACKET_SIZE (`CORE_ADDR_BITS + `TRIG_ID_BITS + `REGION_DATA_BITS) // 6 + 8 + 16 = 30
+// 4 magic number is region address
+`define PACKET_SIZE (`CORE_ADDR_BITS + `TRIG_ID_BITS + 4 +`REGION_DATA_BITS) // 6 + 8 + 16 = 30
 `define NETWORK_MEM_DEPTH 5 // tbd
 
 

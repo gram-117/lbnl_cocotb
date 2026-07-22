@@ -197,6 +197,7 @@ module DigitalCore (
 
    // triggered output data
     output wire [`REGION_DATA_BITS-1:0] RegionDataOut,
+    output logic [3:0] RegionAddrOut,
     output logic [`TRIG_ID_BITS-1:0] RegionTrigOut
    // tie-down
   //  output wire OutLo   // connected to a tie-down cell, used to initialize hit-ORs, pixel-configuration readback data, token and readout data in the top-most core
@@ -925,12 +926,14 @@ module DigitalCore (
    endgenerate
 
 
-  assign PwrDwn = '0;
+  assign PwrDwn = '0; // TEMP TODO REPLACE 
   assign pix_power_down = '0;
+
+
+
    /////////////////////////////////////
    //   pixel-regions instantiation   //
    /////////////////////////////////////
-
    // Instantiate 16 pixel-regions grouping 1x4 pixels (r\phi x z) each one with Distributed Buffering Architecture (DBA).
    // Clusters in the barrel detector are elongated in z and are recorded more efficiently with 50um x 200um rectangular
    // regions rather than using square regions of 2x2 pixels as in FE-I4 chip.
@@ -1080,8 +1083,6 @@ module DigitalCore (
   //  OR2D8LVT hit_or2_lvt ( .A1( hit_or_int[15][2] ), .A2( HitOrIn[2] ), .Z( HitOrOut[2] )) ;
   //  OR2D8LVT hit_or3_lvt ( .A1( hit_or_int[15][3] ), .A2( HitOrIn[3] ), .Z( HitOrOut[3] )) ;
 
-
- 
    // synopsys dc_script_begin
    // set_dont_touch hit_or0_lvt
    // set_dont_touch hit_or1_lvt
@@ -1135,16 +1136,10 @@ module DigitalCore (
    RegionAddrEnc   RegionAddrEnc (.TokMap(tok_map[15:0]), .RegionAddr(region_addr[3:0]) ) ;
 
   //  // concatenate core-row address and pixel-region address to build the full pixel-region address inside a core-column
-  //  wire [`REGION_ADDRESS_BITS-1:0] col_region_addr ;
-  //  assign col_region_addr[`REGION_ADDRESS_BITS-1:0] = { CoreRowAddrIn[`CORE_ROW_ADDRESS_BITS-1:0] , region_addr[3:0] } & {`REGION_ADDRESS_BITS{this_core_read}};
+   wire [`REGION_ADDRESS_BITS-1:0] col_region_addr ;
+   assign RegionAddrOut = {region_addr[3:0] } & {4{this_core_read}};
 
 
-  //  generate
-  //     genvar a ;
-  //     for(a = 0; a < `REGION_ADDRESS_BITS; a++) begin: addr_or_gen
-  //         OR2D8LVT addr_or (.A1(RegionAddrIn[a]), .A2(col_region_addr[a]), .Z(RegionAddrOut[a]));
-  //     end
-  //  endgenerate
 
 
     // synopsys dc_script_begin
