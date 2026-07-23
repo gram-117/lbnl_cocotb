@@ -122,27 +122,27 @@ module NetworkedCore (
     input logic valid_up_in,
     input logic valid_dn_in,
     input logic valid_l_in,
-    input logic valid_r_in,
+    input logic valid_r_in
 
 // for simulation icarus doesnt like packed arr
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_0,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_1,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_2,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_3,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_4,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_5,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_6,
-  output logic [`PACKET_SIZE-1:0] network_mem_tb_7
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_0,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_1,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_2,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_3,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_4,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_5,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_6,
+  // output logic [`PACKET_SIZE-1:0] network_mem_tb_7
 );
 
-assign network_mem_tb_0 = network_mem[0];
-assign network_mem_tb_1 = network_mem[1];
-assign network_mem_tb_2 = network_mem[2];
-assign network_mem_tb_3 = network_mem[3];
-assign network_mem_tb_4 = network_mem[4];
-assign network_mem_tb_5 = network_mem[5];
-assign network_mem_tb_6 = network_mem[6];
-assign network_mem_tb_7 = network_mem[7];
+// assign network_mem_tb_0 = network_mem[0];
+// assign network_mem_tb_1 = network_mem[1];
+// assign network_mem_tb_2 = network_mem[2];
+// assign network_mem_tb_3 = network_mem[3];
+// assign network_mem_tb_4 = network_mem[4];
+// assign network_mem_tb_5 = network_mem[5];
+// assign network_mem_tb_6 = network_mem[6];
+// assign network_mem_tb_7 = network_mem[7];
 
 
 
@@ -263,23 +263,33 @@ assign TokIn = 1'b0; // keep low, lets core readout whenever
   assign local_data_packet = {CoreRowAddrIn, RegionAddrOut, RegionTrigOut, RegionDataOut};
 
 
+logic [$clog2(`NETWORK_MEM_DEPTH + 1)-1:0] buf_status_all [4:0]; // hard coded for now, 2d array of buffer status
+assign buf_status_all[0] = buf_status_up;
+assign buf_status_all[1] = buf_status_dn;
+assign buf_status_all[2] = buf_status_l;
+assign buf_status_all[3] = buf_status_r;
+assign buf_status_all[4] = network_m_cnt;
 // // ROUTER
 // abstracty router will take in local buffer status, neighboring buffer status, 
 // and output a routing decision (set one of the valid signals to high)
-RouterStub router_stub_inst (
-    .buf_status_up (buf_status_up),
-    .buf_status_dn (buf_status_dn),
-    .buf_status_l  (buf_status_l),
-    .buf_status_r  (buf_status_r),
-    .buf_status_self (network_m_cnt),
-
-    .routing_decision (routing_decision)
+Router router_stub_inst (
+    // .buf_status_up (buf_status_up),
+    // .buf_status_dn (buf_status_dn),
+    // .buf_status_l  (buf_status_l),
+    // .buf_status_r  (buf_status_r),
+    // .buf_status_self (network_m_cnt),
+    .buf_status(buf_status_all),
+    .routing_decision (routing_decision) // if no 1s then don't route! only looks at nsew no self
 );
 
 // do we have valid data? (data in network or core bypass)
 
 assign local_data_valid = network_m_cnt > 0 || (core_mem_passthrough && core_mem_valid);
 
+  // [3] = right
+  // [2] = left
+  // [1] = down
+  // [0] = up
 assign valid_up_o = routing_decision[0] && local_data_valid; 
 assign valid_dn_o = routing_decision[1] && local_data_valid; 
 assign valid_l_o = routing_decision[2] && local_data_valid; 
