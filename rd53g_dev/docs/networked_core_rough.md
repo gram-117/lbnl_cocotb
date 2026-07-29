@@ -1,6 +1,4 @@
-# golden model for network core 
-# TODO
-
+WIP WIP WIP WIP 
 manefesto: 
 inputs:
 clk (implement as clk step forward)
@@ -149,7 +147,3 @@ print(router(buf_status, dist_scores))
 
 Note on distScores ordering: in the Verilog, the packed literal is indexed via a part-select, so distScores[0] corresponds to the rightmost field and maps to index 0 (up). When populating the Python dist_scores list, ensure element i matches the value the hardware slices for port i, meaning list the fields in reverse of how they appear in the concatenation.
 ^up is 2 self l r is 1 dn is 0
-
-
-
-

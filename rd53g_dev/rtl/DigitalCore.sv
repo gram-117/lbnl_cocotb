@@ -1037,17 +1037,10 @@ module DigitalCore (
       end
    endgenerate
 
-
-  always_comb begin
-    RegionTrigOut = '0; // default
-    for (int i = 0; i < 16; i++) begin
-      if (tok_int[i]) begin
-        RegionTrigOut = region_trig_bus[i]; // do we want a bus here? idk
-      end
-    end
-  end
-
-  
+    // disgusting ass if-else chain bcs icarus doesn't want to allow break statement w/ for loop
+    // token goes in acending order, read the trigger with it
+    // LATER OPTIMIZATION: same TRIG for a selected region... maybe can do something here
+    
    ////////////////////////////
    //   hit-ORs generation   //
    ////////////////////////////
@@ -1095,10 +1088,6 @@ module DigitalCore (
    //   output data arbitration and addressing    //
    /////////////////////////////////////////////////
 
-   //
-   // MUX triggered data from regions (help synthesis engine for this huge MUX... do this in two steps)
-   //
-
    // take [`REGION_DATA_BITS-1:0] region_data_bus [15:0] and perform intermediate reduction...
    wire [3:0][15:0] data_or_stage_one ;
 
@@ -1111,6 +1100,41 @@ module DigitalCore (
    wire [15:0] data_or_stage_two ;
    assign data_or_stage_two[15:0] = data_or_stage_one[0][15:0] | data_or_stage_one[1][15:0] | data_or_stage_one[2][15:0] | data_or_stage_one[3][15:0] ;
 
+
+    // Intermediate OR reduction of region trigger IDs
+    // only one has token at a time so we can or similar to data out logic 
+    // avoids large priority select logic!!!
+    wire [`TRIG_ID_BITS-1:0] trig_or_stage_one [3:0];
+
+    assign trig_or_stage_one[0] = region_trig_bus[0] |
+                                region_trig_bus[1] |
+                                region_trig_bus[2] |
+                                region_trig_bus[3];
+
+    assign trig_or_stage_one[1] = region_trig_bus[4] |
+                                region_trig_bus[5] |
+                                region_trig_bus[6] |
+                                region_trig_bus[7];
+
+    assign trig_or_stage_one[2] = region_trig_bus[8] |
+                                region_trig_bus[9] |
+                                region_trig_bus[10] |
+                                region_trig_bus[11];
+
+    assign trig_or_stage_one[3] = region_trig_bus[12] |
+                                region_trig_bus[13] |
+                                region_trig_bus[14] |
+                                region_trig_bus[15];
+
+    // Final OR reduction
+    wire [`TRIG_ID_BITS-1:0] trig_or_stage_two;
+
+    assign trig_or_stage_two = trig_or_stage_one[0] |
+                              trig_or_stage_one[1] |
+                              trig_or_stage_one[2] |
+                              trig_or_stage_one[3];
+
+    assign RegionTrigOut = trig_or_stage_two;
 
    // **REMOVE ?
    //wire [3:0][7:0] conf_data_or_stage_one ;

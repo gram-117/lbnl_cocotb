@@ -22,12 +22,17 @@
 // notes:
 /*
 TODO: 
+BIG PICTURE SHID (not 100% grammy problem)
 FIGURE OUT CONFIG STUFF
 FIGURE OUT DISABLING/FAULT TOLERANCE
 
 ADD STEADY STATE 1 CYCLE HIT (clock in and out of same register)
 need to do this by chooiing to write into the slot that is selected by the rptr
-^ done need to be verified!!!!!
+^ done need to be verified!!!!! looks good 7/22/26 :) 
+
+tested canceling as well basic verif
+
+dual edge stuff!!!
 
 
 */
@@ -329,17 +334,17 @@ assign read_n[3] = transact_n[3] && valid_r_in;
 
 // TODO CHECK THIS
 // mux based based off who's turn to assert data on shared bus
-  // per-direction assert index; drive net only when asserting, else 'z
-  assign data_bus_up = assert_n[0] ? data_bus_up_o : 'z;
-  assign data_bus_dn = assert_n[1] ? data_bus_dn_o : 'z;
-  assign data_bus_l  = assert_n[2] ? data_bus_l_o  : 'z;
-  assign data_bus_r  = assert_n[3] ? data_bus_r_o  : 'z;
+// per-direction assert index; drive net only when asserting, else 'z
+assign data_bus_up = assert_n[0] ? data_bus_up_o : 'z;
+assign data_bus_dn = assert_n[1] ? data_bus_dn_o : 'z;
+assign data_bus_l  = assert_n[2] ? data_bus_l_o  : 'z;
+assign data_bus_r  = assert_n[3] ? data_bus_r_o  : 'z;
 
-  // read the shared net back in
-  assign data_bus_up_in = data_bus_up;
-  assign data_bus_dn_in = data_bus_dn;
-  assign data_bus_l_in  = data_bus_l;
-  assign data_bus_r_in  = data_bus_r;
+// read the shared net back in
+assign data_bus_up_in = data_bus_up;
+assign data_bus_dn_in = data_bus_dn;
+assign data_bus_l_in  = data_bus_l;
+assign data_bus_r_in  = data_bus_r;
 
 assign buf_status_self = network_m_cnt;
 

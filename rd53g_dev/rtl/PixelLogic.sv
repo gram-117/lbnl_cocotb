@@ -176,12 +176,12 @@ module TotCounter (
 
     // MODIFIED TO ADD RST
     always_latch begin
-    if (!Reset_b) begin
-        cnt_clk = 1'b0; // changed to <- inside always comb block update back to = bcs verilator
-    end
-    else if(Hit && !TotOverflow && !HitTe) begin 
-           cnt_clk = PixelClkGated;
-    end
+      if (!Reset_b) begin
+          cnt_clk = 1'b0; // changed to <- inside always comb block update back to = bcs verilator
+      end
+      else if(Hit && !TotOverflow && !HitTe) begin 
+            cnt_clk = PixelClkGated;
+      end
     end
     // ^^ was originally LHQD2 cnt clock latch instead using given code !!!!!
     //LHQD1 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;
@@ -189,21 +189,22 @@ module TotCounter (
 
     // 6-bits counter
     // in dual edge mode input clock is forwarded to bit 1 FF becouse output bit 0 comes from Disc falling edge phase
-    wire [5:0]  init_tot_cnt, rcnt_q, rcnt_qn;
+    wire [2:0]  init_tot_cnt, rcnt_q, rcnt_qn;
 
     wire ff1_clk;
 
     // **BUG: wrong ToT for short hits in asynchronous sampling mode and 80 MHz counting (ref. to https://gitlab.cern.ch/rd53/RD53B/-/issues/347)
     //assign ff1_clk = TotDualEdgeCount ? ~cnt_clk  : rcnt_q[0];    // **FIX [Flavio]
-    assign ff1_clk = rcnt_q[0] ; // hardwode to ToT Dual Edge 
+    assign ff1_clk =  ~cnt_clk ; // hardwire to ToT Dual Edge 
 
+    // TODO look at this reduce to 4 bit, also take a sec to understand 
     // Ripple counter
-    TFF_NCLK_NRST ff0(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(~cnt_clk),  .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff1(.q(rcnt_q[1]), .qn(rcnt_qn[1]), .nclk(ff1_clk),   .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff2(.q(rcnt_q[2]), .qn(rcnt_qn[2]), .nclk(rcnt_q[1]), .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff3(.q(rcnt_q[3]), .qn(rcnt_qn[3]), .nclk(rcnt_q[2]), .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff4(.q(rcnt_q[4]), .qn(rcnt_qn[4]), .nclk(rcnt_q[3]), .nrst(cnt_rst_b));
-    SFF_NCLK_NRST ff5(.q(rcnt_q[5]), .qn(rcnt_qn[5]), .nclk(rcnt_q[4]), .nrst(cnt_rst_b));
+    // TOGGLE FLIP FLOP
+    // not used replaced with latched clock edge
+    // TFF_NCLK_NRST ff0(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(~cnt_clk),  .nrst(cnt_rst_b)); // toggle on rising edge cnt_clk
+    TFF_NCLK_NRST ff1(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(ff1_clk),   .nrst(cnt_rst_b)); // toggle on negedge cnt_clk
+    TFF_NCLK_NRST ff2(.q(rcnt_q[1]), .qn(rcnt_qn[1]), .nclk(rcnt_q[0]), .nrst(cnt_rst_b));
+    TFF_NCLK_NRST ff3(.q(rcnt_q[2]), .qn(rcnt_qn[2]), .nclk(rcnt_q[1]), .nrst(cnt_rst_b));
 
     assign init_tot_cnt = ~rcnt_qn;
 
@@ -217,13 +218,13 @@ module TotCounter (
 
     // icarus is complaining about this part: re-written to split up totcnt 
     //sorry: constant selects in always_* processes are not currently supported (all bits will be included).
-    // 6-to-4 bit converter
-    reg [3:0] tot_cnt_int; // use just for tot overflow, lsb doesnt matter
+    reg [2:0] tot_cnt_int; // use just for tot overflow, lsb doesnt matter
     reg [3:0] with_fall_phase;  // seperate for tot out
 
-    // no ToT 6to4 or 40/80mhz mode. 4 bit tot with 80MHz resolution (latch clock edge)
-    assign tot_cnt_int[3:0] = init_tot_cnt[3:0];
-    assign with_fall_phase = {tot_cnt_int[3:1], fall_phase}; // holy shit *** take a look
+    // previous chip had options for 6to4 or 40/80mhz mode, instead:
+    // 4 bit tot with 80MHz resolution (latch clock edge)
+    assign tot_cnt_int = init_tot_cnt;
+    assign with_fall_phase = {tot_cnt_int, fall_phase}; // holy shit *** take a look
 
     // Overflow detector
     assign TotOverflow = (tot_cnt_int[3:1] == 3'b111); // x=='d14 || x=='d15
@@ -232,9 +233,11 @@ module TotCounter (
 
     assign TotCnt = (&(with_fall_phase[3:1]) ? {with_fall_phase[3:1], 1'b0} : 
             with_fall_phase);
-    // ^ if all ones then make the last 1 0
+    // ^ if all ones then make the last 1 into zero 0 (reserve all 1s as empty code)
 
-    // double check here.... prev implementation:-----------------------
+
+
+    // ---------------------prev implementation:-----------------------
     // 6-to-4 bit converter
     // reg [3:0] tot_cnt_int;
     // always_comb begin

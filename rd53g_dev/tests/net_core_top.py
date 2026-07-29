@@ -8,7 +8,7 @@ from cocotb.triggers import FallingEdge, RisingEdge, Timer
 # Test config
 # ============================================================
 
-CLK_PERIOD = 400  # ps
+CLK_PERIOD = 25000  # ps -> 25 ns
 
 # Must match the Verilog definitions.
 PACKET_SIZE = 30
@@ -59,7 +59,7 @@ async def initialize_inputs(dut) -> None:
     dut.LatCntReqIn.value = 0
     dut.TrigIn.value = 0 # smoke test
     dut.TrigClearIn.value = 0
-    dut.TrigIdIn.value = 0
+    dut.TrigIdIn.value = 2
 
     # --- neighbor buffer status (RouterStub inputs) ---
     dut.buf_status_up.value = 0
@@ -80,9 +80,9 @@ async def initialize_inputs(dut) -> None:
 
 async def reset_dut(dut) -> None:
     dut.ResetIn_b.value = 0
-    await wait_rising_edges(dut, 3)
+    await wait_rising_edges(dut, 1)
     dut.ResetIn_b.value = 1
-    await wait_rising_edges(dut, 2)
+    await wait_rising_edges(dut, 1)
     # End on a writable phase, not ReadOnly.
 
 
@@ -225,26 +225,26 @@ async def inject_local_mem(dut, hitmask: int) -> None:
     dut.AnaHit.value = hitmask # this is wrong need to check the math on how it gets broken
     await wait_rising_edges(dut, 4)
     dut.AnaHit.value = 0
-
+    dut.LatCntIn.value = 0 # change lat cnt to something else
     # Allow the external bus drives and valids to settle before arbitration.
     await Timer(1, unit="ps")
 
-    # Packets are captured here.
+    # now bcid matching and trigger
+    await RisingEdge(dut.ClkIn) 
+    # Packets are captured here
     await RisingEdge(dut.ClkIn)
-    await RisingEdge(dut.ClkIn)
-
+    dut.LatCntReqIn.value = 5
+    dut.TrigIn.value = 1
     dut._log.info(
         f"After write posedge: free={dut.TokOut.value}, "
         f"local packet={dut.local_data_packet.value}, ")
+    await RisingEdge(dut.ClkIn)
 
-    dut.LatCntReqIn.value = 5
-    dut.TrigIn.value = 1
-    dut.LatCntIn.value = 0 # change lat cnt to something else
+    dut.LatCntReqIn.value = 0
+    dut.TrigIn.value = 0
     # trigger and then reset it
     await RisingEdge(dut.ClkIn)
-    dut.TrigIn.value = 0
-    dut.LatCntIn.value = 0
-    dut.LatCntReqIn.value = 0
+
 
 
 
@@ -440,7 +440,7 @@ async def multi_inject_test(dut):
         )
         dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
 
-        await wait_rising_edges(dut, 5)  # let counters stabilize
+        await wait_rising_edges(dut, 2)  # let counters stabilize
 
     finally:
         if clk_task is not None:
@@ -512,7 +512,7 @@ async def local_bypass_test(dut):
         # dut.local_data_packet_tb.value = 0
         # await Timer(1, unit="ps")
 
-        await wait_rising_edges(dut, 11)  # let counters stabilize
+        await wait_rising_edges(dut, 4)  # let counters stabilize
 
     finally:
         if clk_task is not None:
@@ -574,7 +574,7 @@ async def overflow_test(dut):
         # )
         dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
 
-        await wait_rising_edges(dut, 12)  # let counters stabilize
+        await wait_rising_edges(dut, 9)  # let counters stabilize
 
     finally:
         if clk_task is not None:
@@ -632,7 +632,7 @@ async def conflict_test(dut):
         # )
         dut._log.info(f"Injected {len(packets)} packets; occupancy={occupancy}")
 
-        await wait_rising_edges(dut, 12)  # let counters stabilize
+        await wait_rising_edges(dut, 8)  # let counters stabilize
 
     finally:
         if clk_task is not None:

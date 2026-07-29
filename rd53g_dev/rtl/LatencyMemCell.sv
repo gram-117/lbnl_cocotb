@@ -79,7 +79,6 @@ module LatencyMemCell (
     logic start_state ;   // just single-FF flags
     logic trig_state ;
  
-    wire req_to_read ;
     wire cleared ;
  
  
@@ -100,6 +99,7 @@ module LatencyMemCell (
  
         if (counter_last)       
         // // register the number identifying the trigger REUSE THE SAME FLIP FLOPS
+        // after BCID match & Trig & rising edge
             counter[`LATENCY_COUNTER_BITS-1:0] <= {LatCnt[`LATENCY_COUNTER_BITS-1:`TRIG_ID_BITS], TrigId[`TRIG_ID_BITS-1:0]} ;    // saves gates and improves testability
 
         else if(WriteLatMem)
@@ -109,7 +109,7 @@ module LatencyMemCell (
     end   // always_ff
  
  
-    assign TrigIdOut = counter[`TRIG_ID_BITS-1:0]; // expose to high level
+    assign TrigIdOut = counter[`TRIG_ID_BITS-1:0]; // expose to high module port for packet building
  
     ///////////////////////////////////////////
     //   timestamp memory controller (FSM)   //
@@ -117,10 +117,9 @@ module LatencyMemCell (
 
     //*****Memory FSM states******
     //           start_state  trig
-    // IDLE        0          0
-    // COUNTING    1          0
-    // TRIGGERED   1          1
-    // TOREAD      0          1
+    // IDLE        0          0 // empty
+    // COUNTING    1          0 // waiting for lat cnt
+    // TRIGGERED   1          1 // got trig -> && readout as
     //****************************
 
     //synopsys sync_set_reset "Reset_b"
@@ -130,7 +129,7 @@ module LatencyMemCell (
         if(~Reset_b)
             start_state <= 1'b0 ;
   
-        else if(WriteLatMem | triggered)
+        else if(WriteLatMem | triggered) // dont need trig_state bcs gated clock
             start_state <= 1'b1 ;
   
         else
@@ -143,7 +142,7 @@ module LatencyMemCell (
         if(~Reset_b)
             trig_state <= 1'b0 ;
   
-        else if(triggered | req_to_read)
+        else if(triggered)
             trig_state <= 1'b1 ;
   
         else
@@ -151,27 +150,26 @@ module LatencyMemCell (
   
     end   // always_ff
  
-    assign Full = start_state | trig_state ;
+    assign Full = start_state;
  
- 
+    // DRAW THIS SHIT OUT!!!!!!!!! TODO make it good as well with gating
     /////////////////////////
     //   trigger matchig   //
     /////////////////////////
  
     // trigger matched before trigger latency elapses, it's time to get ToT data from per-pixel ToT memories !
-    assign req_to_read = start_state & trig_state & !TrigClear;
  
     assign cleared = trig_state & TrigClear ;
  
     // trigger matched ! it's time to get ToT data from per-pixel TOT memories 
-    assign ReadyToRead = trig_state & !start_state ; 
+    assign ReadyToRead = ( trig_state); 
  
  
     //////////////////////
     //   clock gating   //
     //////////////////////
  
-    assign ClkLatMemEn = ~Reset_b | WriteLatMem | counter_last  | req_to_read | ReadLatMem | cleared ;
+    assign ClkLatMemEn = ~Reset_b | WriteLatMem | counter_last | ReadLatMem | cleared;
  
     CG_MOD cg_start_state(.ClkIn(Clk), .Enable(ClkLatMemEn), .ClkOut(gated_clk)) ; 
  
