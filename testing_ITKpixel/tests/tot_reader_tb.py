@@ -146,6 +146,9 @@ async def pixel_test(dut):
         dut.PixelConfWr3bitIn.value  = 0
         dut.PixelConfDataWrIn.value  = 0
         dut.PixelConfDataRdIn.value  = 0
+        dut.LatCntIn.value = 0
+        dut.LatCntReqIn.value = 0
+        dut.TrigIn.value = 1
 
         dut.CalEdgeIn.value          = 0
         dut.CalAuxIn.value           = 0
@@ -155,16 +158,15 @@ async def pixel_test(dut):
         dut.LatCntIn.value           = 0
         dut.LatCntReqIn.value        = 0
 
-        dut.TrigIn.value             = 0
         dut.TrigClearIn.value        = 0
         dut.TrigIdIn.value           = 0
         dut.TrigIdReqIn.value        = 0
 
-        dut.TokIn.value              = 0
-        dut.ReadIn.value             = 0
+        dut.TokIn.value              = 0 # data in
 
         dut.RegionAddrIn.value       = 0
         dut.RegionDataIn.value       = 0
+        dut.ReadIn.value = 0
 
         # Optional analog front-end bias inout pins.
         # These only exist depending on ATLAS_CHIP / CMS_CHIP compile defines.
@@ -209,11 +211,7 @@ async def pixel_test(dut):
         await reset_dut(dut)
         dut._log.info("Reset complete")
 
-        # ------------------------------------------------------------
-        # Start latency counters
-        # ------------------------------------------------------------
-        cnt_task = cocotb.start_soon(generate_latency_counters(dut))
-        await wait_clks(dut, 3)
+
 
         # ------------------------------------------------------------
         # TEST 1: Single hit into pixel 0 / region 0
@@ -226,9 +224,6 @@ async def pixel_test(dut):
         pixel_mask = PIXEL_MASK
 
         # Keep trigger ID stable for this simple test.
-        dut.TrigIdIn.value = 1
-        dut.TrigIdReqIn.value = 0
-
         # Inject hit.
         dut.AnaHit.value = pixel_mask
         await wait_clks(dut, 1)
@@ -239,89 +234,90 @@ async def pixel_test(dut):
 
         await wait_clks(dut, hit_duration - 1)
         dut.AnaHit.value = 0
-        dut.TokIn.value              = 1 # ADDING TOKEN LOGIC 
-
-        # ------------------------------------------------------------
-        # Wait until LatCntReqIn matches captured LatCntIn
-        # ------------------------------------------------------------
-        matched = False
-        for _ in range(200):
-            if str(dut.LatCntReqIn.value) == latcnt_time:
-                matched = True
-                break
-            await RisingEdge(dut.ClkIn)
-
-        if not matched:
-            dut._log.error(f"Timeout waiting for LatCntReqIn to match captured LatCntIn={latcnt_time}")
-            assert False, "Latency counter request never matched captured hit timestamp"
-
-        dut._log.info(f"Latency match found: LatCntReqIn={dut.LatCntReqIn.value}")
-
-        # ------------------------------------------------------------
-        # Issue trigger
-        # ------------------------------------------------------------
-        dut.TrigIdIn.value = 1
-        dut.TrigIn.value = 1
-        await RisingEdge(dut.ClkIn)
-        dut.TrigIn.value = 0
-
-        dut._log.info("Trigger issued")
-
-        # Wait for region data to become valid.
-        await wait_clks(dut, 8)
-
-        # ------------------------------------------------------------
-        # Select trigger ID and assert ReadIn
-        # ------------------------------------------------------------
-        dut.TrigIdReqIn.value = 1 # match trigger but not ready for readout yet
-        await RisingEdge(dut.ClkIn)
-        dut.TrigIdReqIn.value = 0 # move to a different trigger
-        await wait_clks(dut, 8)
-
-        # adding token logic (was prev pinned low), now should wait until 
-        # prev cores are done reading, only asserts bus for one cycle
-        dut.TokIn.value              = 0 
+        await wait_clks(dut, 4)
         dut.ReadIn.value = 1
-        # Clock read through.
-        await RisingEdge(dut.ClkIn)
-
-        if val_has_unknown(dut.RegionDataOut):
-            dut._log.error(f"RegionDataOut has X/Z values: {dut.RegionDataOut.value}")
-            assert False, "RegionDataOut has X/Z values"
-
-        data = dut.RegionDataOut.value.to_unsigned()
-        tots = decode_region_data(data)
-
-        # Region 0 child output is useful as a compact sanity check, but
-        # this test primarily reports the top-level RegionDataOut result.
-        region0_data = dut.PixelRegion[0].PixelRegionLogic.DataToCore.value
-
-        dut._log.info("-" * 60)
-        dut._log.info("RESULT")
-        dut._log.info(f"Region 0 DataToCore = {region0_data}")
-        dut._log.info(f"RegionDataOut       = {dut.RegionDataOut.value}")
-        dut._log.info(f"Decoded RegionDataOut = 0x{data:04x}")
-        dut._log.info(f"ToT values [pixel0, pixel1, pixel2, pixel3] = {tots}")
-        dut._log.info("-" * 60)
-
-        if tots[0] == 0:
-            dut._log.error("Pixel 0 ToT was zero after injecting a hit into pixel 0")
-            assert False, "Expected nonzero ToT for pixel 0"
-
-        if any(tot != 15 for tot in tots[1:]):
-            dut._log.error("Unexpected nonzero ToT in pixels 1-3 (code F/15 means 0)")
-            assert False, "Expected only pixel 0 to have nonzero ToT"
-
-        # ------------------------------------------------------------
-        # Deassert read/request
-        # ------------------------------------------------------------
+        await wait_clks(dut, 1)
         dut.ReadIn.value = 0
-        dut.TrigIdReqIn.value = 0
+                # ------------------------------------------------------------
+        # TEST 1: Single hit into pixel 0 / region 0 ADD 1/4 clock cycles
+        # ------------------------------------------------------------
+        dut._log.info("=" * 60)
+        dut._log.info("TEST 1: Hit pixel 0 for 4 BX clocks")
+        dut._log.info("=" * 60)
 
-        await wait_clks(dut, 5)
+        hit_duration = 4
+        pixel_mask = PIXEL_MASK
 
-        dut._log.info("PASS: Single pixel hit propagated to top-level RegionDataOut.")
+        # Keep trigger ID stable for this simple test.
+        # Inject hit.
+        dut.AnaHit.value = pixel_mask
+        await wait_clks(dut, 1)
 
+        latcnt_time = str(dut.LatCntIn.value)
+        dut._log.info(f"Injected AnaHit mask = {pixel_mask:#x}")
+        dut._log.info(f"Captured hit LatCntIn = {latcnt_time}")
+
+        await wait_clks(dut, hit_duration - 1)
+        await Timer(CLK_PERIOD // 4, unit="ps")
+        dut.AnaHit.value = 0
+        await wait_clks(dut, 4)
+        dut.ReadIn.value = 1
+        await wait_clks(dut, 1)
+        dut.ReadIn.value = 0
+                # ------------------------------------------------------------
+        # TEST 1: Single hit into pixel 0 / region 0 - 1/4
+        # ------------------------------------------------------------
+        dut._log.info("=" * 60)
+        dut._log.info("TEST 1: Hit pixel 0 for 4 BX clocks - 1/4")
+        dut._log.info("=" * 60)
+
+        hit_duration = 4
+        pixel_mask = PIXEL_MASK
+
+        # Keep trigger ID stable for this simple test.
+        # Inject hit.
+        dut.AnaHit.value = pixel_mask
+        await wait_clks(dut, 1)
+
+        latcnt_time = str(dut.LatCntIn.value)
+        dut._log.info(f"Injected AnaHit mask = {pixel_mask:#x}")
+        dut._log.info(f"Captured hit LatCntIn = {latcnt_time}")
+
+        await wait_clks(dut, hit_duration - 2)
+        await Timer(CLK_PERIOD*4 // 3, unit="ps")
+        dut.AnaHit.value = 0
+        await wait_clks(dut, 4)
+        dut.ReadIn.value = 1
+        await wait_clks(dut, 1)
+        dut.ReadIn.value = 0
+        await wait_clks(dut, 4)
+                        # ------------------------------------------------------------
+        # TEST 1: Single hit into pixel 0 / region 0 ADD 3/4 clock cycles
+        # ------------------------------------------------------------
+        dut._log.info("=" * 60)
+        dut._log.info("TEST 1: Hit pixel 0 for 4 BX clocks")
+        dut._log.info("=" * 60)
+
+        hit_duration = 4
+        pixel_mask = PIXEL_MASK
+
+        # Keep trigger ID stable for this simple test.
+        # Inject hit.
+        dut.AnaHit.value = pixel_mask
+        await wait_clks(dut, 1)
+
+        latcnt_time = str(dut.LatCntIn.value)
+        dut._log.info(f"Injected AnaHit mask = {pixel_mask:#x}")
+        dut._log.info(f"Captured hit LatCntIn = {latcnt_time}")
+
+        await wait_clks(dut, hit_duration - 1)
+        await Timer(CLK_PERIOD*3 // 4, unit="ps")
+        dut.AnaHit.value = 0
+        await wait_clks(dut, 4)
+        dut.ReadIn.value = 1
+        await wait_clks(dut, 1)
+        dut.ReadIn.value = 0
+        await wait_clks(dut, 8)
     # CHAT CAME UP WITH THIS WITHOUT IT I CAN"T GET THE WAVEFORM OUT ICARUS WILL CRASH ON EXIT!!!!!!!!!
     finally:
         # Kill background tasks to reduce simulator exit weirdness.

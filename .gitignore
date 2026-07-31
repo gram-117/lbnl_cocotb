@@ -3,3 +3,5 @@ __pycache__/
 
 # venv stuff
 .venv/
+
+**/sim/sim_build/*

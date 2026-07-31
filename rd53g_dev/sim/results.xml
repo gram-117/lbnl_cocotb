@@ -1,11 +1,13 @@
 <testsuites name="results">
   <testsuite name="all" package="all">
-    <property name="random_seed" value="1785368341" />
-    <testcase name="network_layer_base_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="385" time="0.0336153507232666" sim_time_ns="262.5" ratio_time="7808.932358344031" />
-    <testcase name="multi_inject_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="419" time="0.002176046371459961" sim_time_ns="112.5" ratio_time="51699.265914320145" />
-    <testcase name="local_mem_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="450" time="0.0076982975006103516" sim_time_ns="512.5" ratio_time="66573.1611384682" />
-    <testcase name="local_bypass_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="473" time="0.004930019378662109" sim_time_ns="387.4999999999999" ratio_time="78600.09672115289" />
-    <testcase name="overflow_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="523" time="0.0027434825897216797" sim_time_ns="337.5" ratio_time="123018.82332493264" />
-    <testcase name="conflict_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="587" time="0.0024504661560058594" sim_time_ns="312.5" ratio_time="127526.75617824479" />
+    <property name="random_seed" value="1785529510" />
+    <testcase name="network_layer_base_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="387" time="0.031127214431762695" sim_time_ns="262.5" ratio_time="8433.13495254946" />
+    <testcase name="multi_inject_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="421" time="0.0020749568939208984" sim_time_ns="112.5" ratio_time="54217.99379524302" />
+    <testcase name="local_mem_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="452" time="0.0078277587890625" sim_time_ns="512.5" ratio_time="65472.12475633528" />
+    <testcase name="local_mem_test_over" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="474" time="0.008496999740600586" sim_time_ns="512.4999999999999" ratio_time="60315.407278543156" />
+    <testcase name="local_mem_test_under" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="496" time="0.008771419525146484" sim_time_ns="512.5" ratio_time="58428.399021473226" />
+    <testcase name="local_bypass_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="519" time="0.00503087043762207" sim_time_ns="387.5" ratio_time="77024.44433913085" />
+    <testcase name="overflow_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="569" time="0.003047466278076172" sim_time_ns="337.5" ratio_time="110747.73900797997" />
+    <testcase name="conflict_test" classname="net_core_top" file="/home/grammy/lbnl/cocotb/rd53g_dev/tests/net_core_top.py" lineno="633" time="0.002608776092529297" sim_time_ns="312.5" ratio_time="119787.97294827271" />
   </testsuite>
 </testsuites>

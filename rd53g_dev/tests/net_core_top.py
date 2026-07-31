@@ -210,7 +210,7 @@ async def inject_network_packets(dut, packets: dict) -> None:
 
 
 
-async def inject_local_mem(dut, hitmask: int) -> None:
+async def inject_local_mem(dut, hitmask: int, offset: int = 0) -> None:
     """
     Digital hit injection into local memory
 
@@ -224,6 +224,8 @@ async def inject_local_mem(dut, hitmask: int) -> None:
     dut.LatCntIn.value = 5
     dut.AnaHit.value = hitmask # this is wrong need to check the math on how it gets broken
     await wait_rising_edges(dut, 4)
+    if offset > 0:
+      await Timer(offset, unit="ns")
     dut.AnaHit.value = 0
     dut.LatCntIn.value = 0 # change lat cnt to something else
     # Allow the external bus drives and valids to settle before arbitration.
@@ -460,6 +462,50 @@ async def local_mem_test(dut):
         mask = (1 << 32) - 1
 
         await inject_local_mem(dut, mask)
+
+        for i in range(11):
+          await wait_rising_edges(dut, 1)
+          dut._log.info(f"TokOut {dut.TokOut.value}, localpacket {dut.local_data_packet.value}")
+
+    finally:
+        if clk_task is not None:
+            clk_task.cancel()
+## TOT COUNTER TESTING
+@cocotb.test()
+async def local_mem_test_over(dut):
+    """Fill up local memory 4 clock cyles + 1/4."""
+
+    clk_task = cocotb.start_soon(generate_clock(dut))
+
+    try:
+        await initialize_inputs(dut)
+        await reset_dut(dut)
+
+        mask = (1 << 32) - 1
+
+        await inject_local_mem(dut, mask, 6)
+
+        for i in range(11):
+          await wait_rising_edges(dut, 1)
+          dut._log.info(f"TokOut {dut.TokOut.value}, localpacket {dut.local_data_packet.value}")
+
+    finally:
+        if clk_task is not None:
+            clk_task.cancel()
+
+@cocotb.test()
+async def local_mem_test_under(dut):
+    """Fill up local memory 5 clock cycles - 1/4"""
+
+    clk_task = cocotb.start_soon(generate_clock(dut))
+
+    try:
+        await initialize_inputs(dut)
+        await reset_dut(dut)
+
+        mask = (1 << 32) - 1
+
+        await inject_local_mem(dut, mask, 20)
 
         for i in range(11):
           await wait_rising_edges(dut, 1)

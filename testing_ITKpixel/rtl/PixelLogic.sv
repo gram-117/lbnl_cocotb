@@ -264,25 +264,25 @@ module TotCounter (
 
     // icarus is complaining about this part: TRYING TO REPLACE
     //sorry: constant selects in always_* processes are not currently supported (all bits will be included).
-    // 6-to-4 bit converter
+    // // 6-to-4 bit converter
     reg [3:0] tot_cnt_int; // use just for tot overflow, lsb doesnt matter
     reg [3:0] with_fall_phase;  // seperate for tot out
-    always_comb begin // replaced * with comb
-        if(|tot_cnt_stageone[5:3] && Tot6to4Mapping) begin// or all bits in stgone %% if 6to4enable
-            tot_cnt_int[3:0] = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)};
-            // this looks like shit but its verilators fault account for falling phase lsb
-            if (fall_phase) begin
-                with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h1)}; 
-            end
-            else begin
-                with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)}; 
-            end
-        end
-        else begin
-            tot_cnt_int[3:0] = tot_cnt_stageone[3:0];
-            with_fall_phase = {tot_cnt_stageone[3:1], 1'b1}; // holy shit *** take a look
-        end
-    end
+    // always_comb begin // replaced * with comb
+    //     if(|tot_cnt_stageone[5:3] && Tot6to4Mapping) begin// or all bits in stgone %% if 6to4enable
+    //         tot_cnt_int[3:0] = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)};
+    //         // this looks like shit but its verilators fault account for falling phase lsb
+    //         if (fall_phase) begin
+    //             with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h1)}; 
+    //         end
+    //         else begin
+    //             with_fall_phase = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)}; 
+    //         end
+    //     end
+    //     else begin
+    assign tot_cnt_int[3:0] = tot_cnt_stageone[3:0];
+    assign with_fall_phase = {tot_cnt_stageone[3:1], cnt_clk}; // holy shit *** take a look
+    //     end
+    // end
 
     
 
@@ -405,11 +405,11 @@ module TotMemory (
     // ^^ replicate the above code
     logic [3:0] tot_mem_dataout;
 
-    always_comb begin
-    tot_mem_dataout = 4'b0;
-    for (int m = 0; m < `LATENCY_MEM_DEPTH; m++) begin
-        tot_mem_dataout |= (tot_mem[m] & {4{TotMemReadAddr[m]}});
-    end
+    always_comb begin // or chain for selection
+      tot_mem_dataout = 4'b0;
+      for (int m = 0; m < `LATENCY_MEM_DEPTH; m++) begin
+          tot_mem_dataout |= (tot_mem[m] & {4{TotMemReadAddr[m]}});
+      end
     end
 
     assign TotMemDataOut[3:0] = tot_mem_dataout;

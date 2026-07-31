@@ -10,14 +10,16 @@ TOPLEVEL_LANG ?= verilog # just set to verilog, sv works
 PROJ_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
 
 # HDL sources
-# VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl_scrubbed/,$(shell cat $(PROJ_DIR)/sim/files_new.f))
 VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/sim/files.f))
 
 # # Top-level module name in the HDL
 # # Python test module (file name without .py)
 
-# MODULE := net_core_top
-# TOPLEVEL := NetworkedCore
+
+# ToTtesting
+# MODULE := tot_reader_tb
+# TOPLEVEL := DigitalCore
+
 
 MODULE := pixel_core_test_top
 TOPLEVEL := DigitalCore
@@ -25,7 +27,7 @@ TOPLEVEL := DigitalCore
 # MODULE := pixelregion_test_top
 # TOPLEVEL := PixelRegionLogic
 
-# # known working
+# known working
 # MODULE := pixel_test_top
 # TOPLEVEL := PixelLogic
 
@@ -34,7 +36,6 @@ TOPLEVEL := DigitalCore
 
 # Tests live in ../tests, so add that to PYTHONPATH
 export PYTHONPATH := $(PROJ_DIR)/tests:$(PYTHONPATH)
-
 
 include $(shell cocotb-config --makefiles)/Makefile.sim
 

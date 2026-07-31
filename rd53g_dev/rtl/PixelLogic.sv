@@ -23,15 +23,10 @@
 //                  uses ASYNCHRONOUS hit flags (hit_rise) to remove digital deadtime and to enable clock-gating 
 //                  as soon as ToT overfow is reached (was not feasible using synchronous logic).
 //
+// [Status]         devel
 //-----------------------------------------------------------------------------------------------------
 
-/* GRAMMY: ASSUME ATLAS USE FOR ALL NOT CMS
-from rd53c kept same functionality, replaced std cells
-removed CMS stuff
-removed ToT6to4 and selection for dual edge clock ToT
-
-
-*/
+// GRAMMY: ASSUME ATLAS USE FOR ALL NOT CMS
 
 
 `ifndef PIXEL_LOGIC__SV   // include guard
@@ -43,12 +38,41 @@ removed ToT6to4 and selection for dual edge clock ToT
 //`include "rtl/common/defines.sv"
 //`include "rtl/common/CgWrapper.v"         // hard-coded clock-gating module
 //`include "rtl/models/models.sv"           // for the full-custom 4-bit multi-bit latch LNQD1shrinkX4
+// ^ GRAMMY: dont have access to need to make my own 
+/* GRAMMY: ASSUME ATLAS USE FOR ALL NOT CMS
+from rd53c kept same functionality, replaced std cells
+removed CMS stuff
+removed ToT6to4 and selection for dual edge clock ToT
+changed Tot counter to be 4 bits wide and hard coded for dual edge clock
 
+removed reset on the hitle which was causing counting errors + sim errors + metastable??? 
+^ TODO: double check this one... should be good, reset still happens at the same time 
+changed:
+tot counter gets reset on global reset and at hit te
+before: hit le and te and count would be longer then expected
+
+*/
 // MODULES THAT WERE REIMPLEMENTED:
-// TFF from bottom of this file
-// CKLNQD1 cg_cell (.TE (1'b0), .E (Enable), .CP (ClkIn), .Q(ClkOut)); from cgwrapper
-// custom 4-bit latch   LNQD1shrinkX4_V2   MultiBitLatch 
 
+// TFF from bottom of this file
+
+// CKLNQD1 cg_cell (.TE (1'b0), .E (Enable), .CP (ClkIn), .Q(ClkOut)); from cgwrapper
+
+// // use custom 4-bit latch            => **CHANGED** to use new cell-based multibit latch
+            // LNQD1shrinkX4_V2   MultiBitLatch (
+
+            //     .EN (       latch_en ),
+            //     .D0 ( latch_input[0] ),
+            //     .D1 ( latch_input[1] ),
+            //     .D2 ( latch_input[2] ),
+            //     .D3 ( latch_input[3] ),
+            //     .Q0 (  tot_mem[k][0] ),
+            //     .Q1 (  tot_mem[k][1] ),
+            //     .Q2 (  tot_mem[k][2] ),
+            //     .Q3 (  tot_mem[k][3] )
+            
+            // ) ;
+//
 
 `timescale 1ns / 1ps
 //`include "timescale.v"
@@ -139,7 +163,14 @@ module PixelCTRL (
     //
     //  generate reset signals for ToT counter
     //
-    CG_MOD CG_tot_rst (.ClkIn(PixelClkGated), .Enable(~state_sr[1]), .ClkOut(CntRst));
+    // this is a huge fuming piece of shit......................
+    // avoid reseting on edge right before we start ToT counting
+    // resets only after hitte
+    logic CntRstPre;
+    assign CntRst = CntRstPre && !HitLe;
+    CG_MOD CG_tot_rst (.ClkIn(PixelClkGated), .Enable(~state_sr[1]), .ClkOut(CntRstPre));
+    // assign CntRst = (HitTe && PixelClkGated); // test rest only on negedge
+    // 
 
 endmodule: PixelCTRL
 
@@ -160,8 +191,6 @@ module TotCounter (
     input  wire HitTe,
     input  wire CntRst,
     input  wire Reset_b, // added
-    input  wire TotDualEdgeCount,
-    input  wire Tot6to4Mapping,
     output wire [3:0] TotCnt,
     output wire TotOverflow
 
@@ -169,40 +198,44 @@ module TotCounter (
 
     // Counter reset - Active low
     wire cnt_rst_b;
-    assign cnt_rst_b = ~CntRst;
+    // reset during hit tailing edge, also need to reset on global 
+    // reset so we don't start with garbage
+    assign cnt_rst_b = Reset_b &&  ~CntRst;
 
     // Counter clock gating. Output clock level is hold on falling adge of Disc
-    reg cnt_clk;
+    reg cnt_clk; 
 
     // MODIFIED TO ADD RST
     always_latch begin
-      if (!Reset_b) begin
-          cnt_clk = 1'b0; // changed to <- inside always comb block update back to = bcs verilator
-      end
-      else if(Hit && !TotOverflow && !HitTe) begin 
-            cnt_clk = PixelClkGated;
-      end
+    if (!Reset_b) begin
+        cnt_clk = 1'b0; // changed to <- inside always comb lbock update back to = bcs verilator
+    end
+    else if(Hit && !TotOverflow && !HitTe) begin 
+           cnt_clk = PixelClkGated;
+    end
     end
     // ^^ was originally LHQD2 cnt clock latch instead using given code !!!!!
     //LHQD1 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;
     //LHQD2 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;      // fix residual max_cap/max_tran DRVs
 
-    // 6-bits counter
     // in dual edge mode input clock is forwarded to bit 1 FF becouse output bit 0 comes from Disc falling edge phase
     wire [2:0]  init_tot_cnt, rcnt_q, rcnt_qn;
 
     wire ff1_clk;
 
     // **BUG: wrong ToT for short hits in asynchronous sampling mode and 80 MHz counting (ref. to https://gitlab.cern.ch/rd53/RD53B/-/issues/347)
-    //assign ff1_clk = TotDualEdgeCount ? ~cnt_clk  : rcnt_q[0];    // **FIX [Flavio]
-    assign ff1_clk =  ~cnt_clk ; // hardwire to ToT Dual Edge 
+    //assign ff1_clk = TotDualEdgeCount ? ~cnt_clk  : rcnt_q[0];
 
-    // TODO look at this reduce to 4 bit, also take a sec to understand 
+    //--------------------------------------------------------------------------------//
+    // TOT COUNTER HARD CODED TO HAVE TO BE 80MHZ effective and no 6to4 compression!
+    //--------------------------------------------------------------------------------//
+
+    // **FIX [Flavio]
+    assign ff1_clk = cnt_clk;
+
     // Ripple counter
-    // TOGGLE FLIP FLOP
-    // not used replaced with latched clock edge
-    // TFF_NCLK_NRST ff0(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(~cnt_clk),  .nrst(cnt_rst_b)); // toggle on rising edge cnt_clk
-    TFF_NCLK_NRST ff1(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(ff1_clk),   .nrst(cnt_rst_b)); // toggle on negedge cnt_clk
+    // TFF_NCLK_NRST ff0(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(~cnt_clk),  .nrst(cnt_rst_b));
+    TFF_NCLK_NRST ff1(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(ff1_clk),   .nrst(cnt_rst_b));
     TFF_NCLK_NRST ff2(.q(rcnt_q[1]), .qn(rcnt_qn[1]), .nclk(rcnt_q[0]), .nrst(cnt_rst_b));
     TFF_NCLK_NRST ff3(.q(rcnt_q[2]), .qn(rcnt_qn[2]), .nclk(rcnt_q[1]), .nrst(cnt_rst_b));
 
@@ -212,48 +245,22 @@ module TotCounter (
     wire fall_phase;
 
     // **BUG: wrong ToT for short hits in asynchronous sampling mode and 80 MHz counting (ref. to https://gitlab.cern.ch/rd53/RD53B/-/issues/347)
-    //assign fall_phase = ~cnt_clk ;  // **FIX [Flavio]
-    assign fall_phase = cnt_clk; // latched clock phase while hit
+    //assign fall_phase = ~cnt_clk ;
 
-
-    // icarus is complaining about this part: re-written to split up totcnt 
-    //sorry: constant selects in always_* processes are not currently supported (all bits will be included).
-    reg [2:0] tot_cnt_int; // use just for tot overflow, lsb doesnt matter
-    reg [3:0] with_fall_phase;  // seperate for tot out
-
-    // previous chip had options for 6to4 or 40/80mhz mode, instead:
-    // 4 bit tot with 80MHz resolution (latch clock edge)
-    assign tot_cnt_int = init_tot_cnt;
-    assign with_fall_phase = {tot_cnt_int, fall_phase}; // holy shit *** take a look
+    // **FIX [Flavio]
+    assign fall_phase = cnt_clk ;
+    // add falling phase
+    logic [3:0] with_fall_phase;
+    assign with_fall_phase = {init_tot_cnt, cnt_clk}; // holy shit *** take a look
 
     // Overflow detector
-    assign TotOverflow = (tot_cnt_int[3:1] == 3'b111); // x=='d14 || x=='d15
+    assign TotOverflow = (init_tot_cnt[2:0] == 3'b111); // x=='d14 || x=='d15
 
     // exclude 0x0f from output encoding: Reserved for "No data present" code.
 
     assign TotCnt = (&(with_fall_phase[3:1]) ? {with_fall_phase[3:1], 1'b0} : 
             with_fall_phase);
-    // ^ if all ones then make the last 1 into zero 0 (reserve all 1s as empty code)
-
-
-
-    // ---------------------prev implementation:-----------------------
-    // 6-to-4 bit converter
-    // reg [3:0] tot_cnt_int;
-    // always_comb begin
-    //     if(|tot_cnt_stageone[5:3] && Tot6to4Mapping)
-    //         tot_cnt_int[3:0] = {1'b1, 3'(tot_cnt_stageone[5:2] - 4'h2)};
-    //     else
-    //         tot_cnt_int[3:0] = tot_cnt_stageone[3:0];
-    // end
-
-    // // Overflow detector
-    // assign TotOverflow = (tot_cnt_int[3:1] == 3'b111); // x=='d14 || x=='d15
-
-    // // exclude 0x0f from output encoding: Reserved for "No data present" code.
-    // assign TotCnt = (&(tot_cnt_int[3:1]) ? {tot_cnt_int[3:1], 1'b0} : tot_cnt_int);
-    //--------------------------------------------------------------------------
-    
+    // ^ if all ones then make the last 1 0
 endmodule: TotCounter
 
 //
@@ -300,7 +307,7 @@ module TotMemory (
     //////////////////////////////////////
     //   per-pixel ToT latency memory   //
     //////////////////////////////////////    
-    // REASON MEM TAKES SO LONG TO UPDATE: 
+    // REASON MEM TAkes SO LONG TO UPDATE: 
     // latch condition: needs TE to go high (sync) then clock to go low (falling edge)
     generate
         genvar k;
@@ -364,11 +371,11 @@ module TotMemory (
     // ^^ replicate the above code
     logic [3:0] tot_mem_dataout;
 
-    always_comb begin
-    tot_mem_dataout = 4'b0;
-    for (int m = 0; m < `LATENCY_MEM_DEPTH; m++) begin
-        tot_mem_dataout |= (tot_mem[m] & {4{TotMemReadAddr[m]}});
-    end
+    always_comb begin // or chain for selection
+      tot_mem_dataout = 4'b0;
+      for (int m = 0; m < `LATENCY_MEM_DEPTH; m++) begin
+          tot_mem_dataout |= (tot_mem[m] & {4{TotMemReadAddr[m]}});
+      end
     end
 
     assign TotMemDataOut[3:0] = tot_mem_dataout;
@@ -391,10 +398,6 @@ module PixelLogic (
     output logic PixelClkEn,                                // per-pixel clock-gating enable generated either from hit (clock-gating is then common to all pixels in the pixel-region)
     input  wire PixelClkGated,                              // region-level gated clock activated either by HitLeAny or by PixelClkEn
     input  wire Reset_b,                                    // global asynchronous reset, active low
-
-    // global configuration
-    input  wire Tot6to4Mapping,                             // enable/disable 6b/4b ToT encoding with dual-slope mapping
-    input  wire TotDualEdgeCount,                           // enable/disable ToT counting at 80 MHz using dual-edge 
 
     // hit/ToT control logic
     input  wire Hit,                                        // hit pulse, either from analog front-end or from digital injection
@@ -456,8 +459,6 @@ module PixelLogic (
         .HitTe            (            HitTe ),
         .CntRst           (           CntRst ),
         .Reset_b          (           Reset_b),
-        .TotDualEdgeCount ( TotDualEdgeCount ),
-        .Tot6to4Mapping   (   Tot6to4Mapping ),
         .TotCnt           (     tot_cnt[3:0] ),
         .TotOverflow      (     tot_overflow )
     ) ;

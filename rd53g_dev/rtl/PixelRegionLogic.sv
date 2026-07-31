@@ -112,7 +112,6 @@ module PixelRegionLogic (
 
    wire [3:0] pixel_data [3:0] ;   // ToT values from all 4 pixels in the region
 
-
    generate
 
       genvar p ;
@@ -125,14 +124,6 @@ module PixelRegionLogic (
             .PixelClkEn       (                            pixel_clk_en[p] ),
             .PixelClkGated    (                            pixel_clk_gated ),
             .Reset_b          (                                    Reset_b ),
-
-            // global configuration
-            .Tot6to4Mapping   (                             Tot6to4Mapping ),
-            .TotDualEdgeCount (                           TotDualEdgeCount ),
-
-         `ifdef CMS_CHIP
-            .HitSampleMode    (                              HitSampleMode ),
-         `endif
 
             // hit/ToT control logic
             .Hit              (                                     Hit[p] ),
