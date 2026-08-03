@@ -103,7 +103,7 @@ module FeControl (
    //   latch-based Pixel Configuration Register (PCR), optionally with TMR and SEU detection   //
    ///////////////////////////////////////////////////////////////////////////////////////////////
 
-   wire [7:0] conf_latches ;
+   logic [7:0] conf_latches;
 
 
    // TEMP TODO GET RID OF THIS temp signals so i dont have to go through this procrastenating!!!!!!
@@ -139,14 +139,29 @@ module FeControl (
    // See also https://gitlab.cern.ch/rd53/RD53B/issues/128
    //
 
-      LHQD1_TMR  conf_latch_0 (.D(PixelConfDataWr[0]), .E(PixelConfWr3bit), .Q(conf_latches[0]), .Q0(), .Q1(), .Q2()) ;   // hit_en
-      LHQD1      conf_latch_1 (.D(PixelConfDataWr[1]), .E(PixelConfWr3bit), .Q(conf_latches[1])) ;                        // cal_en              **NO TMR**
-      LHQD1      conf_latch_2 (.D(PixelConfDataWr[2]), .E(PixelConfWr3bit), .Q(conf_latches[2])) ;                        // hitOr_en            **NO TMR**
-      LHQD1      conf_latch_3 (.D(PixelConfDataWr[3]), .E(PixelConfWr5bit), .Q(conf_latches[3])) ;                        // tdac_code[0]        **NO TMR**
-      LHQD1_TMR  conf_latch_4 (.D(PixelConfDataWr[4]), .E(PixelConfWr5bit), .Q(conf_latches[4]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[1]
-      LHQD1_TMR  conf_latch_5 (.D(PixelConfDataWr[5]), .E(PixelConfWr5bit), .Q(conf_latches[5]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[2]
-      LHQD1_TMR  conf_latch_6 (.D(PixelConfDataWr[6]), .E(PixelConfWr5bit), .Q(conf_latches[6]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[3]
-      LHQD1_TMR  conf_latch_7 (.D(PixelConfDataWr[7]), .E(PixelConfWr5bit), .Q(conf_latches[7]), .Q0(), .Q1(), .Q2()) ;   // tdac_code[4] = tdac_sign for DIFF front-end
+      // was standard cells:
+      //   LHQD1_TMR (conf_latch_0) — hit_en
+      //   LHQD1     (conf_latch_1) — cal_en       (no TMR)
+      //   LHQD1     (conf_latch_2) — hitOr_en     (no TMR)
+      //   LHQD1     (conf_latch_3) — tdac_code[0] (no TMR)
+      //   LHQD1_TMR (conf_latch_4) — tdac_code[1]
+      //   LHQD1_TMR (conf_latch_5) — tdac_code[2]
+      //   LHQD1_TMR (conf_latch_6) — tdac_code[3]
+      //   LHQD1_TMR (conf_latch_7) — tdac_code[4] / tdac_sign for DIFF
+      always_latch begin
+          if (PixelConfWr3bit) begin
+              conf_latches[0] <= PixelConfDataWr[0];
+              conf_latches[1] <= PixelConfDataWr[1];
+              conf_latches[2] <= PixelConfDataWr[2];
+          end
+          if (PixelConfWr5bit) begin
+              conf_latches[3] <= PixelConfDataWr[3];
+              conf_latches[4] <= PixelConfDataWr[4];
+              conf_latches[5] <= PixelConfDataWr[5];
+              conf_latches[6] <= PixelConfDataWr[6];
+              conf_latches[7] <= PixelConfDataWr[7];
+          end
+      end
 
 
    ////////////////////////////////////////////////////////////////////////////////////////////////////////

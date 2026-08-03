@@ -295,7 +295,8 @@ module DigitalCore (
    // set_dont_touch clk_root_rtlbuf
    // synopsys dc_script_end
 
-   CKBD8  clk_root_rtlbuf ( .I(del_clk_int), .Z(del_clk) ) ;
+   // was standard cell: CKBD8 (clk_root_rtlbuf)
+   assign del_clk = del_clk_int;
 
 
 
@@ -356,7 +357,8 @@ module DigitalCore (
    //
    // CalAux buffer => pre-placed at the middle of the 8x8 core
    //
-   CKBD8 CalAux_rtlbuf ( .I(CalAuxIn ), .Z(CalAuxOut )) ;            // **IMPORTANT: then changed into CKBD12 with ecoChangeCell in place-and-route to fix top-leve DRVs !
+   // was standard cell: CKBD8 (CalAux_rtlbuf) — note: was ecoChanged to CKBD12 in PnR for DRV fix
+   assign CalAuxOut = CalAuxIn;
 
    // synopsys dc_script_begin
    // set_dont_touch CalAux_rtlbuf
@@ -375,9 +377,15 @@ module DigitalCore (
 
    // **REMOVE** assigns already in RTL but then let the tool to the optimize the proper buffer strength => NO dont_touch statements on these buffers, only on input signals
 
-   BUFFD2LVT          EnDigHit_rtlbuf ( .I(         EnDigHitIn ), .Z(         EnDigHitOut )) ;
-   BUFFD2LVT  AnaInjectionMode_rtlbuf ( .I( AnaInjectionModeIn ), .Z( AnaInjectionModeOut )) ;
-   CKBD1      PixelConfDefault_rtlbuf ( .I( PixelConfDefaultIn ), .Z( PixelConfDefaultOut )) ;
+   // was standard cell: BUFFD2LVT (EnDigHit_rtlbuf)
+   wire EnDigHitOut;
+   assign EnDigHitOut = EnDigHitIn;
+   // was standard cell: BUFFD2LVT (AnaInjectionMode_rtlbuf)
+   wire AnaInjectionModeOut;
+   assign AnaInjectionModeOut = ANA_INJECTION_MODE;
+   // was standard cell: CKBD1 (PixelConfDefault_rtlbuf)
+   wire PixelConfDefaultOut;
+   assign PixelConfDefaultOut = 1'b0;
 
 
 
@@ -965,7 +973,8 @@ module DigitalCore (
    wire tok_last_region = tok_int[16] ;
 
    //assign TokOut = TokIn | tok_last_region ;
-   OR2D8LVT token_or_lvt (.A1(tok_last_region), .A2(TokIn), .Z(TokOut));
+   // was standard cell: OR2D8LVT (token_or_lvt)
+   assign TokOut = tok_last_region | TokIn;
 
    // synopsys dc_script_begin
    // set_dont_touch token_or_lvt
@@ -1184,7 +1193,9 @@ module DigitalCore (
    // synopsys dc_script_begin
    // set_dont_touch LTIELO_OUTLO
    // synopsys dc_script_end 
-   TIEL LTIELO_OUTLO (.ZN(OutLo)) ; 
+   // was standard cell: TIEL (LTIELO_OUTLO)
+   wire OutLo;
+   assign OutLo = 1'b0;
 
 
    `endif   // DIGITAL_CORE_ABSTRACT 

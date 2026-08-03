@@ -46,33 +46,26 @@ module SigFork (
    ) ;
 
 
-   CKBD16LVT outbuf(.I(I), .Z(O)) ;   // CKBD16LVT is the second largest clock buffer provided by the library
-   CKBD8LVT  locbuf(.I(O), .Z(L)) ;
-
-   // synopsys dc_script_begin
-   // set_dont_touch outbuf
-   // set_dont_touch locbuf
-   // synopsys dc_script_end
+   // was standard cell: CKBD16LVT (outbuf)
+   assign O = I;
+   // was standard cell: CKBD8LVT (locbuf)
+   assign L = O;
 
 endmodule : SigFork
 
 
 module SigForkConf (
 
-   input  wire I,   
-   output wire O,  
-   output wire L  
+   input  wire I,
+   output wire O,
+   output wire L
 
    ) ;
 
-
-   CKBD8LVT outbuf(.I(I), .Z(O)) ;
-   CKBD4    locbuf(.I(O), .Z(L)) ;
-
-   // synopsys dc_script_begin
-   // set_dont_touch outbuf
-   // set_dont_touch locbuf
-   // synopsys dc_script_end
+   // was standard cell: CKBD8LVT (outbuf)
+   assign O = I;
+   // was standard cell: CKBD4 (locbuf)
+   assign L = O;
 
 endmodule : SigForkConf
 
@@ -80,20 +73,16 @@ endmodule : SigForkConf
 
 module SigForkStatic (
 
-   input  wire I,   
-   output wire O,  
-   output wire L  
+   input  wire I,
+   output wire O,
+   output wire L
 
    ) ;
 
-
-   CKBD4  outbuf(.I(I), .Z(O)) ;
-   CKBD2  locbuf(.I(O), .Z(L)) ;
-
-   // synopsys dc_script_begin
-   // set_dont_touch outbuf
-   // set_dont_touch locbuf
-   // synopsys dc_script_end
+   // was standard cell: CKBD4 (outbuf)
+   assign O = I;
+   // was standard cell: CKBD2 (locbuf)
+   assign L = O;
 
 endmodule : SigForkStatic
 

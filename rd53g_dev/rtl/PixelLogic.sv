@@ -219,7 +219,8 @@ module TotCounter (
     //LHQD2 cnt_clk_latch (.E(Hit && !TotOverflow && !HitTe), .D(PixelClkGated), .Q(cnt_clk) ) ;      // fix residual max_cap/max_tran DRVs
 
     // in dual edge mode input clock is forwarded to bit 1 FF becouse output bit 0 comes from Disc falling edge phase
-    wire [2:0]  init_tot_cnt, rcnt_q, rcnt_qn;
+    wire  [2:0] init_tot_cnt;
+    logic [2:0] rcnt_q, rcnt_qn;
 
     wire ff1_clk;
 
@@ -235,9 +236,24 @@ module TotCounter (
 
     // Ripple counter
     // TFF_NCLK_NRST ff0(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(~cnt_clk),  .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff1(.q(rcnt_q[0]), .qn(rcnt_qn[0]), .nclk(ff1_clk),   .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff2(.q(rcnt_q[1]), .qn(rcnt_qn[1]), .nclk(rcnt_q[0]), .nrst(cnt_rst_b));
-    TFF_NCLK_NRST ff3(.q(rcnt_q[2]), .qn(rcnt_qn[2]), .nclk(rcnt_q[1]), .nrst(cnt_rst_b));
+
+    // was standard cell: TFF_NCLK_NRST (ff1)
+    always_ff @(negedge ff1_clk or negedge cnt_rst_b)
+        if (~cnt_rst_b) rcnt_q[0] <= 1'b0;
+        else            rcnt_q[0] <= !rcnt_q[0];
+    assign rcnt_qn[0] = !rcnt_q[0];
+
+    // was standard cell: TFF_NCLK_NRST (ff2)
+    always_ff @(negedge rcnt_q[0] or negedge cnt_rst_b)
+        if (~cnt_rst_b) rcnt_q[1] <= 1'b0;
+        else            rcnt_q[1] <= !rcnt_q[1];
+    assign rcnt_qn[1] = !rcnt_q[1];
+
+    // was standard cell: TFF_NCLK_NRST (ff3)
+    always_ff @(negedge rcnt_q[1] or negedge cnt_rst_b)
+        if (~cnt_rst_b) rcnt_q[2] <= 1'b0;
+        else            rcnt_q[2] <= !rcnt_q[2];
+    assign rcnt_qn[2] = !rcnt_q[2];
 
     assign init_tot_cnt = ~rcnt_qn;
 
@@ -328,20 +344,15 @@ module TotMemory (
             wire latch_en ;
             assign latch_en = PixelClkGated | ~latch_condition ;   // **WARN: negative-level sensitive !
 
-            // use custom 4-bit latch            => **CHANGED** to use new cell-based multibit latch
-            LNQD1shrinkX4_V2   MultiBitLatch (
-
-                .EN (      latch_en ), // active low? needs clock to be low, HitTe
-                .D0 ( latch_input[0] ),
-                .D1 ( latch_input[1] ),
-                .D2 ( latch_input[2] ),
-                .D3 ( latch_input[3] ),
-                .Q0 (  tot_mem[k][0] ),
-                .Q1 (  tot_mem[k][1] ),
-                .Q2 (  tot_mem[k][2] ),
-                .Q3 (  tot_mem[k][3] )
-            
-            ) ;
+            // was standard cell: LNQD1shrinkX4_V2 (MultiBitLatch) — transparent-low 4-bit latch
+            always_latch begin
+                if (~latch_en) begin
+                    tot_mem[k][0] <= latch_input[0];
+                    tot_mem[k][1] <= latch_input[1];
+                    tot_mem[k][2] <= latch_input[2];
+                    tot_mem[k][3] <= latch_input[3];
+                end
+            end
 
         end : TotMem
     endgenerate
