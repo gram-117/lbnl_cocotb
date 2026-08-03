@@ -10,6 +10,8 @@
 // which get routed into it
 // each core can take in data from each cardinal direction + data from its local memory each cycles
 // but only outputs to one core per cycle
+// ---------------------this version--------------------------------------------------
+// half cycle hand shake to avoid collisions and then data gets asserted by rising edge
 
 // define packet to be: addr trig data **
 
@@ -150,10 +152,8 @@ module NetworkedCore (
 // assign network_mem_tb_7 = network_mem[7];
 
 
-
 // gated clock for network memory, high on valids 
-logic ClkNetGated;
-logic found;// bullshit signal bcs icarus likes complaining
+logic ClkNetGated; // TODO
 
 
 // arbiting / busses
@@ -349,7 +349,7 @@ assign data_bus_r_in  = data_bus_r;
 assign buf_status_self = network_m_cnt;
 
 
-
+logic found; // bullshit signal bcs icarus likes complaining (can't use break)
 // READ LOGIC : rptr + occupancy count
 always_comb begin
   selected_data_packet = local_data_packet; // default to empty-network case
@@ -422,20 +422,25 @@ end
 
 
 // could gate clk on |valid  or some shit later.....
+// network memory: gate on valid inputs 
+// free status buffer: gate on valid inputs || !empty
+// writes happen on pos, reads happen on pos and neg
+logic valid_input;
+// this path could be long... run through timing and potentially remove
+assign valid_input = valid_up_in | valid_dn_in | valid_l_in | valid_r_in;
+logic network_clk;
+assign network_clk = ClkIn && (valid_input) // network is unchanged unless we write
+
 always_ff @(posedge ClkIn) begin
   // for each slot index into the write enable and valid chain for that slot
   // then used fixed priority to choose the next input if Wen 
+  // might not need (we dont read if free buffer is all free....)
   if (!ResetIn_b) begin
     // network mem can be garbage
-    network_m_free <= '1; // start off with all slots free!
     for (int i = 0; i < `NETWORK_MEM_DEPTH; i++)
-      network_mem[i] <= '0;   // no Z on unwritten reads
+      network_mem[i] <= '0;   // sim complain
   end
-
   else begin
-    // default case
-    network_m_free <= network_m_free;
-
     for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin : NetworkMemory
       if (network_m_Wen[mem_idx]) begin
         network_m_free[mem_idx] <= 1'b0; // just wrote data in its not free
@@ -453,17 +458,42 @@ always_ff @(posedge ClkIn) begin
         // if no cases match: Wen was high (there was valid data and this slot was free)
         // and then the valid_arr was empty this should never happen
       end
-      // if reading from the node and not writing data in on the same cycle then clear
-      // if no current status check, if empty -> already writes 1
-      if (network_rptr == mem_idx && !network_m_Wen[mem_idx] && |assert_n) begin 
-        network_m_free[mem_idx] <= 1'b1;
+    end
+  end
+end
+
+// not gating for now, less benefit on smaller structure, look into after timing
+always_ff @(posedge ClkIn) begin
+  // for each slot index into the write enable and valid chain for that slot
+  // then used fixed priority to choose the next input if Wen 
+  if (!ResetIn_b) begin
+    // network mem can be garbage
+    network_m_free <= '1; // start off with all slots free!
+  end
+  else begin
+    // default case
+    network_m_free <= network_m_free;
+    for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin : NetworkMemory
+        if (network_rptr == mem_idx && !network_m_Wen[mem_idx] && |assert_n) begin 
+          network_m_free[mem_idx] <= 1'b1;
       end
     end
-
-
   end
-
-
 end
+
+// assertions:
+
+// slot source maps between inputs and their network write address
+// each index should be one hot or 0
+// jk icraus doesnt allow concurrent assertions for some fucking reason
+// genvar i;
+// generate
+//   for (i = 0; i < N; i++) begin : slot_src_0onehot
+//     check_onehot0 : assert property (
+//       @(posedge clk) disable iff (!ResetIn_b)
+//       $onehot0(arr[i])
+//     ) else $error("arr[%0d] = %b is neither one-hot nor zero", i, arr[i]);
+//   end
+// endgenerate
 
 endmodule
