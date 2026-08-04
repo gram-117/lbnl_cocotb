@@ -168,8 +168,8 @@ async def pixel_test(dut):
     dut.HitLeAny.value         = 0
     dut.TotMemWriteAddr.value  = LogicArray.from_unsigned(0, 8)
     dut.TotMemReadAddr.value   = LogicArray.from_unsigned(0, 8)
-    dut.Tot6to4Mapping.value   = 1 if TOT6TO4 else 0
-    dut.TotDualEdgeCount.value = 1 if TOT_DUAL_EDGE else 0
+    # dut.Tot6to4Mapping.value   = 1 if TOT6TO4 else 0 no longer global config
+    # dut.TotDualEdgeCount.value = 1 if TOT_DUAL_EDGE else 0
 
     golden = PixelGolden(CLK_PERIOD,
                          (1 if TOT_DUAL_EDGE else 0),

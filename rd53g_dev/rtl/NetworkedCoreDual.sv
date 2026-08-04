@@ -43,7 +43,7 @@ dual edge stuff!!!
 
 */
 
-module NetworkedCore (
+module NetworkedCoreDual (
    // TO DIGITAL CORE
    /////////////////////////////
    //   hits from testbench   //
@@ -184,7 +184,7 @@ logic TokIn, TokOut;
 logic [`PACKET_SIZE-1:0] network_mem [`NETWORK_MEM_DEPTH-1:0];
 
 logic [`NETWORK_MEM_DEPTH-1:0] network_m_Wen;
-logic [`NETWORK_MEM_DEPTH-1:0] network_m_free;
+logic [`NETWORK_MEM_DEPTH-1:0] network_m_full;
 logic [$clog2(`NETWORK_MEM_DEPTH+1)-1:0] network_m_cnt;
 logic [$clog2(`NETWORK_MEM_DEPTH+1)-1:0] network_rptr;
 
@@ -198,7 +198,12 @@ logic       local_data_valid;
 logic [3:0] routing_decision;          
 logic [3:0] read_n;                    
 logic [3:0] assert_n;
-logic [3:0] transact_n;
+
+// negedge buffer
+logic [`PACKET_SIZE-1:0] negedge_buffer_l;
+logic [`PACKET_SIZE-1:0] negedge_buffer_dn;
+logic valid_l_in_buf; 
+logic valid_dn_in_buf;
 
 // digital core interaction
 logic [`REGION_DATA_BITS-1:0] RegionDataOut;
@@ -281,7 +286,7 @@ assign buf_status_all[4] = network_m_cnt;
 // // ROUTER
 // abstracty router will take in local buffer status, neighboring buffer status, 
 // and output a routing decision (set one of the valid signals to high)
-Router router_stub_inst (
+Router router_inst (
     // .buf_status_up (buf_status_up),
     // .buf_status_dn (buf_status_dn),
     // .buf_status_l  (buf_status_l),
@@ -292,17 +297,16 @@ Router router_stub_inst (
 );
 
 // do we have valid data? (data in network or core bypass)
-
-assign local_data_valid = network_m_cnt > 0 || (core_mem_passthrough && core_mem_valid);
+assign local_data_valid = network_m_cnt != 0 || (core_mem_passthrough && core_mem_valid);
 
   // [3] = right
   // [2] = left
   // [1] = down
   // [0] = up
-assign valid_up_o = routing_decision[0] && local_data_valid; 
-assign valid_dn_o = routing_decision[1] && local_data_valid; 
-assign valid_l_o = routing_decision[2] && local_data_valid; 
-assign valid_r_o = routing_decision[3] && local_data_valid; 
+assign valid_up_o = routing_decision[0] && local_data_valid && ClkIn; 
+assign valid_dn_o = routing_decision[1] && local_data_valid && !ClkIn; 
+assign valid_l_o = routing_decision[2] && local_data_valid && ClkIn; 
+assign valid_r_o = routing_decision[3] && local_data_valid && !ClkIn; 
 
 
 // need some decision making to choose which slots next for now just fixed priority
@@ -310,39 +314,26 @@ assign valid_r_o = routing_decision[3] && local_data_valid;
 // )
 // prolly won't be a module though (wptr in memory)
 
-// Transaction occurs when exactly one side asserts valid
-// Order: Up, Down, Left, Right
-always_ff @(negedge ClkIn) begin
-    if (!ResetIn_b) begin
-        transact_n <= '0;
-    end else begin
-        transact_n[0] <= valid_up_o ^ valid_up_in;
-        transact_n[1] <= valid_dn_o ^ valid_dn_in;
-        transact_n[2] <= valid_l_o  ^ valid_l_in;
-        transact_n[3] <= valid_r_o  ^ valid_r_in;
-    end
-end
-
-
 // this core is asserting for a transaction
-assign assert_n[0] = transact_n[0] && valid_up_o;
-assign assert_n[1] = transact_n[1] && valid_dn_o;
-assign assert_n[2] = transact_n[2] && valid_l_o;
-assign assert_n[3] = transact_n[3] && valid_r_o;
+assign assert_n[0] = valid_up_o;
+assign assert_n[1] = valid_dn_o;
+assign assert_n[2] = valid_l_o;
+assign assert_n[3] = valid_r_o;
 
 // Neighbor owns the bus; this core reads from it.
-assign read_n[0] = transact_n[0] && valid_up_in;
-assign read_n[1] = transact_n[1] && valid_dn_in;
-assign read_n[2] = transact_n[2] && valid_l_in;
-assign read_n[3] = transact_n[3] && valid_r_in;
+assign read_n[0] = valid_up_in;
+assign read_n[3] = valid_r_in;
+// dn and l are negedge buffered
+assign read_n[1] = valid_dn_in_buf;
+assign read_n[2] = valid_l_in_buf;
 
 // TODO CHECK THIS
 // mux based based off who's turn to assert data on shared bus
-// per-direction assert index; drive net only when asserting, else 'z
-assign data_bus_up = assert_n[0] ? data_bus_up_o : 'z;
-assign data_bus_dn = assert_n[1] ? data_bus_dn_o : 'z;
-assign data_bus_l  = assert_n[2] ? data_bus_l_o  : 'z;
-assign data_bus_r  = assert_n[3] ? data_bus_r_o  : 'z;
+// turn is based off current clock state due to neg/posedge logic
+assign data_bus_up = !ClkIn ? data_bus_up_o : 'z;
+assign data_bus_dn = ClkIn ? data_bus_dn_o : 'z;
+assign data_bus_l  = ClkIn ? data_bus_l_o  : 'z;
+assign data_bus_r  = !ClkIn ? data_bus_r_o  : 'z;
 
 // read the shared net back in
 assign data_bus_up_in = data_bus_up;
@@ -353,42 +344,42 @@ assign data_bus_r_in  = data_bus_r;
 assign buf_status_self = network_m_cnt;
 
 
-logic found; // bullshit signal bcs icarus likes complaining (can't use break)
+logic packet_found; // signal bcs icarus likes complaining (can't use break)
 // READ LOGIC : rptr + occupancy count
 always_comb begin
   selected_data_packet = local_data_packet; // default to empty-network case
   network_rptr         = '0;
-  found                = 1'b0;
+  packet_found         = 1'b0;
 
   for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin
-    if (!network_m_free[mem_idx] && !found) begin
+    if (!network_m_full[mem_idx] && !packet_found) begin
       selected_data_packet = network_mem[mem_idx];
       network_rptr         = mem_idx;
-      found                = 1'b1;
+      packet_found                = 1'b1;
     end
   end
 
   // occupancy count
   network_m_cnt = '0;
   for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++)
-    network_m_cnt = network_m_cnt + (network_m_free[mem_idx] ? 1'b0 : 1'b1);
+    network_m_cnt = network_m_cnt + (network_m_full[mem_idx] ? 1'b1 : 1'b0);
 end
 
 
 // WRITE-DECISION LOGIC : valid chain, Wen, slot_src priority encode
 always_comb begin
   // LOCAL CORE, UP, DOWN, LEFT, RIGHT (0->4), core = LSB = highest prio
-  core_mem_passthrough = &network_m_free; // network empty -> pass straight through
+  core_mem_passthrough = !(|network_m_full); // network empty -> pass straight through
   valid_arr            = {read_n, (core_mem_valid && !core_mem_passthrough)};
 
-  for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin : NetworkMemory
+  for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin 
     if (mem_idx == 0)
       valid_arr_chain[mem_idx] = valid_arr;              // first slot gets raw value
     else
       valid_arr_chain[mem_idx] = valid_arr_chain[mem_idx-1]; // rest chained
 
     // Wen if (free or being read this cycle) && valid data remaining
-    network_m_Wen[mem_idx] = (network_m_free[mem_idx] ||
+    network_m_Wen[mem_idx] = (!network_m_full[mem_idx] ||
                               (network_rptr == mem_idx && |assert_n))
                              && |valid_arr_chain[mem_idx];
 
@@ -425,13 +416,34 @@ always_comb begin
 end
 
 
-// could gate clk on |valid  or some shit later.....
+
+// 1/2 cycle buffering on negedge signals 
+always_ff @(negedge ClkIn) begin
+  if (!ResetIn_b) begin
+      valid_l_in_buf <= 1'b0;
+      valid_dn_in_buf <= 1'b0;
+  end
+  else begin // only high for one cycle, gets read or dropped
+      if (valid_l_in) valid_l_in_buf <= 1'b1;
+      else valid_l_in_buf <= 1'b0;
+
+      if (valid_dn_in) valid_dn_in_buf <= 1'b1;
+      else valid_dn_in_buf <= 1'b0;
+  end
+end
+
+always_ff @(negedge ClkIn) begin
+    if (valid_l_in) negedge_buffer_l <= data_bus_l_in;
+    if (valid_dn_in) negedge_buffer_dn <= data_bus_dn_in;
+end
+
+
 // network memory: gate on valid inputs 
-// free status buffer: gate on valid inputs || !empty
 // writes happen on pos, reads happen on pos and neg
 logic valid_input;
-// this path could be long... run through timing and potentially remove
-assign valid_input = valid_up_in | valid_dn_in | valid_l_in | valid_r_in;
+// this path could be long... run through timing and potentially remove clock gating
+// TODO: use cg std cell or explicit clock enable w/ latch
+assign valid_input = valid_up_in | valid_dn_in_buf | valid_l_in_buf | valid_r_in;
 logic network_clk;
 assign network_clk = ClkIn && (valid_input); // network is unchanged unless we write
 
@@ -447,13 +459,11 @@ always_ff @(posedge network_clk) begin
   else begin
     for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin : NetworkMemory
       if (network_m_Wen[mem_idx]) begin
-        network_m_free[mem_idx] <= 1'b0; // just wrote data in its not free
-
         unique case (slot_src[mem_idx])
           5'b00001: network_mem[mem_idx] <= local_data_packet;
           5'b00010: network_mem[mem_idx] <= data_bus_up_in;
-          5'b00100: network_mem[mem_idx] <= data_bus_dn_in;
-          5'b01000: network_mem[mem_idx] <= data_bus_l_in;
+          5'b00100: network_mem[mem_idx] <= negedge_buffer_dn;
+          5'b01000: network_mem[mem_idx] <= negedge_buffer_l;
           5'b10000: network_mem[mem_idx] <= data_bus_r_in;
           // should never reach this
           // default:  $error("NetworkedCore: Wen high but slot_src empty (slot %0d)", mem_idx); 
@@ -466,24 +476,46 @@ always_ff @(posedge network_clk) begin
   end
 end
 
-// not gating for now, less benefit on smaller structure, look into after timing
-always_ff @(posedge ClkIn) begin
-  // for each slot index into the write enable and valid chain for that slot
-  // then used fixed priority to choose the next input if Wen 
-  if (!ResetIn_b) begin
-    // network mem can be garbage
-    network_m_free <= '1; // start off with all slots free!
-  end
-  else begin
-    // default case
-    network_m_free <= network_m_free;
-    for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin : NetworkMemory
-        if (network_rptr == mem_idx && !network_m_Wen[mem_idx] && |assert_n) begin 
-          network_m_free[mem_idx] <= 1'b1;
-      end
+// FREE STATUS BUFFER FOR NETWORK LAYER ENTRIES
+// writes into the network only happen on posedge
+// reads happen on both edges of the clock
+// BE CAREFUL HERE
+// switched from free to full so reset to 0 means empty
+
+logic [`NETWORK_MEM_DEPTH-1:0] full_next;
+always_comb begin
+  for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin
+    // if we are reading and not writing (posedge && index are equal) 
+    // either need found signal or default case for network_rptr
+    // fire when rptr == same idx, not writing in, and reading out this edge
+
+    // default case, same as prev
+    full_next = network_m_full[mem_idx];
+    // reading out and not writing in
+    if (network_rptr == mem_idx && (!network_m_Wen[mem_idx] | ClkIn) && packet_found) begin 
+        full_next[mem_idx] = 1'b1; // free slot
+    end
+    // writing and not reading (happens on posedge only)
+    else if (network_m_Wen[mem_idx] == mem_idx && !ClkIn) begin
+        full_next[mem_idx] = 1'b0; // just wrote valid data into slot
     end
   end
 end
+
+// could clock gate here: ClkIn && (|valid in || !(|network_m_full))
+// clk off if no valids inputs and nothing to be read out
+generate 
+  genvar network_idx;
+    for (network_idx = 0; network_idx < `NETWORK_MEM_DEPTH; network_idx++) begin : NetworkMemoryStatus
+      DualEdgeFf dual_edge_ff (
+        .clk(ClkIn), 
+        .rst_n(ResetIn_b), 
+        .d(full_next[network_idx]), 
+        .q(network_m_full[network_idx])
+      );
+    end
+endgenerate
+
 
 // assertions:
 

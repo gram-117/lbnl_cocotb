@@ -15,8 +15,13 @@ VERILOG_SOURCES := $(addprefix $(PROJ_DIR)/rtl/,$(shell cat $(PROJ_DIR)/sim/file
 # # Top-level module name in the HDL
 # # Python test module (file name without .py)
 
-MODULE := net_core_top
-TOPLEVEL := NetworkedCore
+
+MODULE := net_core_dual_top
+TOPLEVEL := NetworkedCoreDual
+
+
+# MODULE := net_core_top
+# TOPLEVEL := NetworkedCore
 
 # keep other tests but they are now for modified rtl!!
 # MODULE := pixel_core_test_top

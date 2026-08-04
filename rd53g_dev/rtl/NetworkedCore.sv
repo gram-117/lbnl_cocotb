@@ -9,9 +9,13 @@
 // generated ToT packets and acting as part of the transport mesh for all packets
 // which get routed into it
 // each core can take in data from each cardinal direction + data from its local memory each cycles
+
 // but only outputs to one core per cycle
-// ---------------------this version--------------------------------------------------
-// half cycle hand shake to avoid collisions and then data gets asserted by rising edge
+
+// IMPORTANT
+// ---------------------this version----------------------------------------------------
+// half cycle hand shake to avoid collisions and then data gets asserted by rising edge-
+// -------------------------------------------------------------------------------------
 
 // define packet to be: addr trig data **
 
@@ -429,9 +433,9 @@ logic valid_input;
 // this path could be long... run through timing and potentially remove
 assign valid_input = valid_up_in | valid_dn_in | valid_l_in | valid_r_in;
 logic network_clk;
-assign network_clk = ClkIn && (valid_input) // network is unchanged unless we write
+assign network_clk = ClkIn && (valid_input); // network is unchanged unless we write
 
-always_ff @(posedge ClkIn) begin
+always_ff @(posedge network_clk) begin
   // for each slot index into the write enable and valid chain for that slot
   // then used fixed priority to choose the next input if Wen 
   // might not need (we dont read if free buffer is all free....)

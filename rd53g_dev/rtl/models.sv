@@ -21,6 +21,40 @@ module TFF_NCLK_NRST (
     assign qn = !q;
 endmodule
 
+// for free slots in network layer
+module DualEdgeFf (
+    input  logic clk,
+    input  logic rst_n,
+    input  logic d,
+    output logic q
+);
+
+logic q_pos;
+logic q_neg;
+
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q_pos <= 1'b0;
+    else
+        q_pos <= d;
+end
+
+always_ff @(negedge clk or negedge rst_n) begin
+    if (!rst_n)
+        q_neg <= 1'b0;
+    else
+        q_neg <= d;
+end
+
+always_comb begin
+    if (clk)
+        q = q_pos;
+    else
+        q = q_neg;
+end
+
+endmodule
+
 
 // use custom 4-bit latch => **CHANGED** to use new cell-based multibit latch
 module LNQD1shrinkX4_V2 (
