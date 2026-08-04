@@ -32,14 +32,14 @@ module DualEdgeFf (
 logic q_pos;
 logic q_neg;
 
-always_ff @(posedge clk or negedge rst_n) begin
+always_ff @(posedge clk) begin
     if (!rst_n)
         q_pos <= 1'b0;
     else
         q_pos <= d;
 end
 
-always_ff @(negedge clk or negedge rst_n) begin
+always_ff @(negedge clk) begin
     if (!rst_n)
         q_neg <= 1'b0;
     else

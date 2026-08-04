@@ -12,9 +12,11 @@
 
 // but only outputs to one core per cycle
 
-// IMPORTANT
+// IMPORTANT!!!!!!!!
 // ---------------------this version----------------------------------------------------
-// up/left on negedge, down/right on negedge "double data rate"
+// up left down write being from the perspective of this core!!!!!!
+// posedge: write down/right read up/left
+// negedge: read up/left write up/left
 // -------------------------------------------------------------------------------------
 
 // define packet to be: addr trig data **
@@ -111,7 +113,7 @@ module NetworkedCoreDual (
    output wire TrigClearOut,
 
    input wire [`TRIG_ID_BITS-1:0] TrigIdIn,
-   input wire [`TRIG_ID_BITS-1:0] TrigIdOut,
+   output wire [`TRIG_ID_BITS-1:0] TrigIdOut,
 
     // NETWORKING LAYER SIGNALS
     inout wire [`PACKET_SIZE-1:0] data_bus_up,
@@ -133,27 +135,27 @@ module NetworkedCoreDual (
     input logic valid_up_in,
     input logic valid_dn_in,
     input logic valid_l_in,
-    input logic valid_r_in
+    input logic valid_r_in,
 
 // for simulation icarus doesnt like packed arr
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_0,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_1,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_2,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_3,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_4,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_5,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_6,
-  // output logic [`PACKET_SIZE-1:0] network_mem_tb_7
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_0,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_1,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_2,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_3,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_4,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_5,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_6,
+  output logic [`PACKET_SIZE-1:0] network_mem_tb_7
 );
 
-// assign network_mem_tb_0 = network_mem[0];
-// assign network_mem_tb_1 = network_mem[1];
-// assign network_mem_tb_2 = network_mem[2];
-// assign network_mem_tb_3 = network_mem[3];
-// assign network_mem_tb_4 = network_mem[4];
-// assign network_mem_tb_5 = network_mem[5];
-// assign network_mem_tb_6 = network_mem[6];
-// assign network_mem_tb_7 = network_mem[7];
+assign network_mem_tb_0 = network_mem[0];
+assign network_mem_tb_1 = network_mem[1];
+assign network_mem_tb_2 = network_mem[2];
+assign network_mem_tb_3 = network_mem[3];
+assign network_mem_tb_4 = network_mem[4];
+assign network_mem_tb_5 = network_mem[5];
+assign network_mem_tb_6 = network_mem[6];
+assign network_mem_tb_7 = network_mem[7];
 
 
 // gated clock for network memory, high on valids 
@@ -200,9 +202,9 @@ logic [3:0] read_n;
 logic [3:0] assert_n;
 
 // negedge buffer
-logic [`PACKET_SIZE-1:0] negedge_buffer_l;
+logic [`PACKET_SIZE-1:0] negedge_buffer_r;
 logic [`PACKET_SIZE-1:0] negedge_buffer_dn;
-logic valid_l_in_buf; 
+logic valid_r_in_buf; 
 logic valid_dn_in_buf;
 
 // digital core interaction
@@ -303,10 +305,10 @@ assign local_data_valid = network_m_cnt != 0 || (core_mem_passthrough && core_me
   // [2] = left
   // [1] = down
   // [0] = up
-assign valid_up_o = routing_decision[0] && local_data_valid && ClkIn; 
-assign valid_dn_o = routing_decision[1] && local_data_valid && !ClkIn; 
-assign valid_l_o = routing_decision[2] && local_data_valid && ClkIn; 
-assign valid_r_o = routing_decision[3] && local_data_valid && !ClkIn; 
+assign valid_up_o = routing_decision[0] && local_data_valid && ClkLvl; 
+assign valid_dn_o = routing_decision[1] && local_data_valid && !ClkLvl; 
+assign valid_l_o = routing_decision[2] && local_data_valid && ClkLvl; 
+assign valid_r_o = routing_decision[3] && local_data_valid && !ClkLvl; 
 
 
 // need some decision making to choose which slots next for now just fixed priority
@@ -322,18 +324,21 @@ assign assert_n[3] = valid_r_o;
 
 // Neighbor owns the bus; this core reads from it.
 assign read_n[0] = valid_up_in;
-assign read_n[3] = valid_r_in;
+assign read_n[2] = valid_l_in;
 // dn and l are negedge buffered
 assign read_n[1] = valid_dn_in_buf;
-assign read_n[2] = valid_l_in_buf;
+assign read_n[3] = valid_r_in_buf;
 
 // TODO CHECK THIS
 // mux based based off who's turn to assert data on shared bus
 // turn is based off current clock state due to neg/posedge logic
-assign data_bus_up = !ClkIn ? data_bus_up_o : 'z;
-assign data_bus_dn = ClkIn ? data_bus_dn_o : 'z;
-assign data_bus_l  = ClkIn ? data_bus_l_o  : 'z;
-assign data_bus_r  = !ClkIn ? data_bus_r_o  : 'z;
+// clock is high -> assert data before negedge
+assign data_bus_up = ClkLvl ? data_bus_up_o : 'z;
+assign data_bus_l  = ClkLvl ? data_bus_l_o  : 'z;
+// clock is low -> assert data before rising edge
+assign data_bus_dn = !ClkLvl ? data_bus_dn_o : 'z;
+assign data_bus_r  = !ClkLvl ? data_bus_r_o  : 'z;
+
 
 // read the shared net back in
 assign data_bus_up_in = data_bus_up;
@@ -342,6 +347,13 @@ assign data_bus_l_in  = data_bus_l;
 assign data_bus_r_in  = data_bus_r;
 
 assign buf_status_self = network_m_cnt;
+
+// Clock used ONLY as a data/enable level. Never as a flop clock.
+`ifndef CLK_LVL_DLY
+  `define CLK_LVL_DLY 0.05    // < t_hold margin, << half period
+`endif
+wire ClkLvl;
+assign #(`CLK_LVL_DLY) ClkLvl = ClkIn; // FOR SIM PURPOSES!!!!
 
 
 logic packet_found; // signal bcs icarus likes complaining (can't use break)
@@ -352,10 +364,10 @@ always_comb begin
   packet_found         = 1'b0;
 
   for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin
-    if (!network_m_full[mem_idx] && !packet_found) begin
+    if (network_m_full[mem_idx] && !packet_found) begin
       selected_data_packet = network_mem[mem_idx];
       network_rptr         = mem_idx;
-      packet_found                = 1'b1;
+      packet_found         = 1'b1;
     end
   end
 
@@ -420,12 +432,12 @@ end
 // 1/2 cycle buffering on negedge signals 
 always_ff @(negedge ClkIn) begin
   if (!ResetIn_b) begin
-      valid_l_in_buf <= 1'b0;
+      valid_r_in_buf <= 1'b0;
       valid_dn_in_buf <= 1'b0;
   end
   else begin // only high for one cycle, gets read or dropped
-      if (valid_l_in) valid_l_in_buf <= 1'b1;
-      else valid_l_in_buf <= 1'b0;
+      if (valid_r_in) valid_r_in_buf <= 1'b1;
+      else valid_r_in_buf <= 1'b0;
 
       if (valid_dn_in) valid_dn_in_buf <= 1'b1;
       else valid_dn_in_buf <= 1'b0;
@@ -433,21 +445,32 @@ always_ff @(negedge ClkIn) begin
 end
 
 always_ff @(negedge ClkIn) begin
-    if (valid_l_in) negedge_buffer_l <= data_bus_l_in;
+  if (!ResetIn_b) begin
+      negedge_buffer_r <= '0;
+      negedge_buffer_dn <= '0;
+  end
+  else begin
+    if (valid_r_in) negedge_buffer_r <= data_bus_r_in;
     if (valid_dn_in) negedge_buffer_dn <= data_bus_dn_in;
+  end
 end
 
 
 // network memory: gate on valid inputs 
 // writes happen on pos, reads happen on pos and neg
-logic valid_input;
+
 // this path could be long... run through timing and potentially remove clock gating
 // TODO: use cg std cell or explicit clock enable w/ latch
-assign valid_input = valid_up_in | valid_dn_in_buf | valid_l_in_buf | valid_r_in;
+logic valid_input;
+assign valid_input = valid_up_in | valid_dn_in_buf | valid_r_in_buf | 
+      valid_l_in | (core_mem_valid && !core_mem_passthrough);
+      
 logic network_clk;
-assign network_clk = ClkIn && (valid_input); // network is unchanged unless we write
+logic net_en_lat;
+always_latch if (!ClkIn) net_en_lat = valid_input;
+assign network_clk = ClkIn & net_en_lat;
 
-always_ff @(posedge network_clk) begin
+always_ff @(posedge ClkIn) begin
   // for each slot index into the write enable and valid chain for that slot
   // then used fixed priority to choose the next input if Wen 
   // might not need (we dont read if free buffer is all free....)
@@ -463,8 +486,8 @@ always_ff @(posedge network_clk) begin
           5'b00001: network_mem[mem_idx] <= local_data_packet;
           5'b00010: network_mem[mem_idx] <= data_bus_up_in;
           5'b00100: network_mem[mem_idx] <= negedge_buffer_dn;
-          5'b01000: network_mem[mem_idx] <= negedge_buffer_l;
-          5'b10000: network_mem[mem_idx] <= data_bus_r_in;
+          5'b01000: network_mem[mem_idx] <= data_bus_l_in;
+          5'b10000: network_mem[mem_idx] <= negedge_buffer_r;
           // should never reach this
           // default:  $error("NetworkedCore: Wen high but slot_src empty (slot %0d)", mem_idx); 
           // System task ($error) cannot be synthesized in an always_ff process.^
@@ -481,40 +504,50 @@ end
 // reads happen on both edges of the clock
 // BE CAREFUL HERE
 // switched from free to full so reset to 0 means empty
-
-logic [`NETWORK_MEM_DEPTH-1:0] full_next;
-always_comb begin
-  for (int mem_idx = 0; mem_idx < `NETWORK_MEM_DEPTH; mem_idx++) begin
-    // if we are reading and not writing (posedge && index are equal) 
-    // either need found signal or default case for network_rptr
-    // fire when rptr == same idx, not writing in, and reading out this edge
-
-    // default case, same as prev
-    full_next = network_m_full[mem_idx];
-    // reading out and not writing in
-    if (network_rptr == mem_idx && (!network_m_Wen[mem_idx] | ClkIn) && packet_found) begin 
-        full_next[mem_idx] = 1'b1; // free slot
-    end
-    // writing and not reading (happens on posedge only)
-    else if (network_m_Wen[mem_idx] == mem_idx && !ClkIn) begin
-        full_next[mem_idx] = 1'b0; // just wrote valid data into slot
-    end
-  end
-end
+// NO CLOCK IN COMB!!! for now... icarus gets very mad
 
 // could clock gate here: ClkIn && (|valid in || !(|network_m_full))
 // clk off if no valids inputs and nothing to be read out
-generate 
-  genvar network_idx;
-    for (network_idx = 0; network_idx < `NETWORK_MEM_DEPTH; network_idx++) begin : NetworkMemoryStatus
-      DualEdgeFf dual_edge_ff (
-        .clk(ClkIn), 
-        .rst_n(ResetIn_b), 
-        .d(full_next[network_idx]), 
-        .q(network_m_full[network_idx])
-      );
-    end
-endgenerate
+// generate 
+//   genvar network_idx;
+//     for (network_idx = 0; network_idx < `NETWORK_MEM_DEPTH; network_idx++) begin : NetworkMemoryStatus
+//       DualEdgeFf dual_edge_ff (
+//         .clk(ClkIn), 
+//         .rst_n(ResetIn_b), 
+//         .d(full_next[network_idx]), 
+//         .q(network_m_full[network_idx])
+//       );
+//     end
+// endgenerate
+
+
+// "manual" dual edge ff full register
+logic [`NETWORK_MEM_DEPTH-1:0] full_q_p, full_q_n, full_p_next, full_n_next;
+logic read_fire;
+assign read_fire = packet_found && |assert_n;   // phase-gated via assert_n
+
+always_comb begin
+  for (int i = 0; i < `NETWORK_MEM_DEPTH; i++) begin
+    // posedge: writes land here, plus frees a slot
+    full_p_next[i] = network_m_Wen[i] ? 1'b1 :
+                     (network_rptr == i && read_fire) ? 1'b0 :
+                                                    network_m_full[i];
+    // negedge: no writes, only the read frees a slot
+    full_n_next[i] = (network_rptr == i && read_fire) ? 1'b0 :
+                                                    network_m_full[i];
+  end
+end
+
+always_ff @(posedge ClkIn) begin
+  if (!ResetIn_b) full_q_p <= '0; else full_q_p <= full_p_next;
+end
+
+always_ff @(negedge ClkIn) begin
+  if (!ResetIn_b) full_q_n <= '0; else full_q_n <= full_n_next;
+end
+// rising edge clk low: sees full_q_n
+// falling edge clk high: sees full_q_p
+assign network_m_full = ClkLvl ? full_q_p : full_q_n;
 
 
 // assertions:
